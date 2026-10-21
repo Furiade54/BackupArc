@@ -58,7 +58,7 @@ export function obtenerConfiguracionAvanzada(): ConfiguracionAvanzada {
   return {
     siempreVisible: leerBooleano(CLAVES_CONFIGURACION.siempreVisible, false),
     iniciarConSistema: app.isPackaged
-      ? app.getLoginItemSettings().openAtLogin
+      ? inicioAutomaticoActivo()
       : leerBooleano(CLAVES_CONFIGURACION.iniciarConSistema, false),
     iniciarMinimizado: leerBooleano(CLAVES_CONFIGURACION.iniciarMinimizado, false),
     mostrarAvisos: leerBooleano(CLAVES_CONFIGURACION.mostrarAvisos, true),
@@ -75,8 +75,27 @@ function opcionesInicioAutomatico(abrir: boolean): Electron.Settings {
   };
 }
 
+function opcionesConsultaInicio(): Electron.LoginItemSettingsOptions {
+  return process.platform === 'win32'
+    ? { path: process.execPath, args: [ARGUMENTO_INICIO_OCULTO] }
+    : {};
+}
+
+// En Windows el registro incluye --oculto, por lo que hay que comparar con
+// esos argumentos; sin ellos la consulta devuelve siempre desactivado.
+function inicioAutomaticoActivo(): boolean {
+  if (!app.isPackaged) {
+    return false;
+  }
+
+  return (
+    app.getLoginItemSettings(opcionesConsultaInicio()).openAtLogin ||
+    app.getLoginItemSettings().openAtLogin
+  );
+}
+
 export function sincronizarInicioAutomatico(): void {
-  if (!app.isPackaged || !app.getLoginItemSettings().openAtLogin) {
+  if (!inicioAutomaticoActivo()) {
     return;
   }
 
