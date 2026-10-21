@@ -1,0 +1,137 @@
+.navegacion {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  width: 232px;
+  border-right: 1px solid var(--borde);
+  background: var(--fondo-panel);
+  overflow: hidden;
+  transition: width 0.18s ease;
+}
+
+.navegacion--cerrada {
+  width: 0;
+  border-right-width: 0;
+}
+
+.navegacion__contenido {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  width: 232px;
+  padding: 14px 10px;
+}
+
+.navegacion__pie {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding: 2px 4px;
+}
+
+.navegacion__version {
+  margin: 0;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.navegacion__ajustes {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--texto-suave);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.navegacion__ajustes:hover {
+  background: color-mix(in srgb, var(--texto) 8%, transparent);
+  color: var(--texto);
+}
+
+.navegacion__ajustes svg {
+  transition: transform 0.18s ease;
+}
+
+.navegacion__ajustes:hover svg {
+  transform: rotate(35deg);
+}
+
+.navegacion__ajustes:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--acento);
+}
+
+.navegacion__titulo {
+  margin: 0 8px 8px;
+  color: var(--texto-suave);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.navegacion__lista {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.navegacion__enlace {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--texto-suave);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.navegacion__enlace:hover {
+  background: color-mix(in srgb, var(--texto) 7%, transparent);
+  color: var(--texto);
+}
+
+.navegacion__enlace:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--acento);
+}
+
+.navegacion__enlace--activo {
+  background: color-mix(in srgb, var(--acento) 15%, transparent);
+  color: var(--texto);
+}
+
+.navegacion__enlace--activo svg {
+  color: var(--acento);
+}
+
+.navegacion__enlace svg {
+  flex: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navegacion,
+  .navegacion__enlace,
+  .navegacion__ajustes,
+  .navegacion__ajustes svg {
+    transition: none;
+  }
+}

@@ -1,0 +1,294 @@
+.tarjeta-respaldo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 224px;
+  padding: 16px;
+  border: 1px solid var(--borde);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(18, 29, 51, 0.92), rgba(14, 23, 41, 0.96));
+  box-shadow: 0 12px 30px rgba(2, 8, 20, 0.28);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.tarjeta-respaldo:hover {
+  border-color: color-mix(in srgb, var(--acento) 38%, var(--borde));
+  transform: translateY(-1px);
+}
+
+.tarjeta-respaldo--deshabilitada {
+  border-style: dashed;
+}
+
+.tarjeta-respaldo--ejecutando {
+  border-color: rgba(200, 234, 251, 0.5);
+  box-shadow:
+    0 0 0 1px rgba(200, 234, 251, 0.2),
+    0 12px 30px rgba(2, 8, 20, 0.28),
+    0 0 24px rgba(200, 234, 251, 0.18);
+}
+
+.tarjeta-respaldo--deshabilitada .tarjeta-respaldo__nombre,
+.tarjeta-respaldo--deshabilitada .tarjeta-respaldo__base,
+.tarjeta-respaldo--deshabilitada .tarjeta-respaldo__fila strong,
+.tarjeta-respaldo--deshabilitada .tarjeta-respaldo__proxima {
+  color: var(--texto-suave);
+}
+
+.tarjeta-respaldo__encabezado {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--borde);
+}
+
+.tarjeta-respaldo__identidad {
+  min-width: 0;
+}
+
+.tarjeta-respaldo__nombre {
+  margin: 0;
+  overflow: hidden;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tarjeta-respaldo__base {
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: var(--texto-suave);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.punto-estado {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: #64748b;
+}
+
+.punto-estado--ok {
+  background: var(--ok);
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.12);
+}
+
+.punto-estado--advertencia {
+  background: var(--aviso);
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.12);
+}
+
+.punto-estado--error {
+  background: var(--error);
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.12);
+}
+
+.punto-estado--pendiente {
+  background: #64748b;
+  box-shadow: 0 0 0 4px rgba(100, 116, 139, 0.12);
+}
+
+.punto-estado--ejecutando {
+  background: var(--acento);
+  box-shadow: 0 0 0 4px rgba(200, 234, 251, 0.18), 0 0 12px rgba(200, 234, 251, 0.85);
+  animation: punto-estado-ejecutando 1.05s ease-in-out infinite;
+}
+
+@keyframes punto-estado-ejecutando {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+.tarjeta-respaldo__fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--texto-suave);
+  font-size: 12.5px;
+}
+
+.tarjeta-respaldo__fila strong {
+  color: var(--texto);
+  font-weight: 500;
+}
+
+.barra-ciclo {
+  height: 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--texto) 8%, transparent);
+  box-shadow: inset 0 0 0 1px var(--borde);
+  overflow: hidden;
+}
+
+.barra-ciclo__relleno {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #64748b;
+  transition: width 0.4s ease;
+}
+
+.barra-ciclo__relleno--vigente {
+  background: var(--ok);
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.35);
+}
+
+.barra-ciclo__relleno--vencido {
+  background: var(--error);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.35);
+}
+
+.barra-ciclo__relleno--deshabilitado {
+  background: #64748b;
+}
+
+.barra-ciclo--ejecutando .barra-ciclo__relleno {
+  background: linear-gradient(
+    90deg,
+    rgba(200, 234, 251, 0.22),
+    rgba(230, 245, 254, 0.95),
+    rgba(200, 234, 251, 0.22)
+  );
+  background-size: 200% 100%;
+  box-shadow: 0 0 10px rgba(200, 234, 251, 0.5);
+  animation: barrido-ejecucion 1.1s linear infinite;
+}
+
+@keyframes barrido-ejecucion {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: -100% 0;
+  }
+}
+
+.tarjeta-respaldo__repeticion {
+  margin: 0;
+  color: var(--texto-suave);
+  font-size: 12px;
+}
+
+.indicador-ejecucion {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  color: var(--acento);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.indicador-ejecucion__punto {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--acento);
+  box-shadow: 0 0 8px rgba(200, 234, 251, 0.9);
+  animation: punto-estado-ejecutando 1.05s ease-in-out infinite;
+}
+
+.enlace-accion {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--acento);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.enlace-accion:hover {
+  text-decoration: underline;
+}
+
+.enlace-accion:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--acento);
+  border-radius: 4px;
+}
+
+.tarjeta-respaldo__pie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 2px;
+}
+
+.tarjeta-respaldo__proxima {
+  min-width: 0;
+  color: var(--texto-suave);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.tarjeta-respaldo__acciones {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.boton-icono {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--texto-suave);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.boton-icono:hover {
+  background: color-mix(in srgb, var(--texto) 8%, transparent);
+  color: var(--texto);
+}
+
+.boton-icono--peligro:hover {
+  background: color-mix(in srgb, var(--error) 16%, transparent);
+  color: var(--error);
+}
+
+.boton-icono:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--acento);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tarjeta-respaldo,
+  .barra-ciclo__relleno {
+    transition: none;
+  }
+
+  .punto-estado--ejecutando,
+  .indicador-ejecucion__punto,
+  .barra-ciclo--ejecutando .barra-ciclo__relleno {
+    animation: none;
+  }
+}

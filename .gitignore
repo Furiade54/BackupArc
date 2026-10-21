@@ -1,0 +1,11 @@
+node_modules/
+dist/
+out/
+out-msi/
+out-verify/
+.vite/
+.env
+*.log
+*.db
+.DS_Store
+coverage/

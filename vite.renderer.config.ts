@@ -1,0 +1,12 @@
+import path from 'node:path';
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  root: path.resolve(process.cwd(), 'src/renderer'),
+  plugins: [react()],
+  build: {
+    outDir: path.resolve(process.cwd(), '.vite/renderer/main_window'),
+    emptyOutDir: true,
+  },
+});
