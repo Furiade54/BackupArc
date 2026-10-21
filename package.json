@@ -1,6 +1,6 @@
 {
   "name": "backuparc",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "description": "BackupArc 2.0 - Gestión de respaldos de SQL Server",
   "author": "BackupArc",

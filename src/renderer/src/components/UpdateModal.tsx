@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { ResultadoActualizacion } from '../../../shared/types/api.types';
 import { Modal } from './Modal';
 import './UpdateModal.css';
@@ -9,12 +10,35 @@ interface UpdateModalProps {
 }
 
 export function UpdateModal({ resultado, buscando, alCerrar }: UpdateModalProps) {
+  const [instalando, setInstalando] = useState(false);
+  const [porcentaje, setPorcentaje] = useState(0);
+  const [errorInstalacion, setErrorInstalacion] = useState<string | null>(null);
+
+  useEffect(() => {
+    return window.api.actualizaciones.alProgresoDescarga((progreso) => {
+      setPorcentaje(progreso.porcentaje);
+    });
+  }, []);
+
   const abrirPublicacion = () => {
     if (!resultado?.urlPublicacion) {
       return;
     }
 
     void window.api.actualizaciones.abrir(resultado.urlPublicacion);
+  };
+
+  const instalar = async () => {
+    setInstalando(true);
+    setErrorInstalacion(null);
+    setPorcentaje(0);
+
+    const respuesta = await window.api.actualizaciones.instalar();
+
+    if (!respuesta.ok) {
+      setErrorInstalacion(respuesta.error);
+      setInstalando(false);
+    }
   };
 
   return (
@@ -46,15 +70,55 @@ export function UpdateModal({ resultado, buscando, alCerrar }: UpdateModalProps)
             </p>
           )}
 
+          {instalando && (
+            <div className="actualizacion__progreso">
+              <div
+                className="actualizacion__barra"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={porcentaje}
+              >
+                <span className="actualizacion__barra-relleno" style={{ width: `${porcentaje}%` }} />
+              </div>
+              <span className="actualizacion__estado">
+                {porcentaje < 100
+                  ? `Descargando el instalador… ${porcentaje}%`
+                  : 'Iniciando el instalador…'}
+              </span>
+            </div>
+          )}
+
+          {errorInstalacion && (
+            <p className="formulario__error" role="alert">
+              {errorInstalacion}
+            </p>
+          )}
+
           <div className="formulario__acciones">
-            <button type="button" className="boton boton--secundario" onClick={alCerrar}>
+            <button
+              type="button"
+              className="boton boton--secundario"
+              onClick={alCerrar}
+              disabled={instalando}
+            >
               Cerrar
             </button>
 
             {resultado.estado === 'disponible' && resultado.urlPublicacion && (
-              <button type="button" className="boton" onClick={abrirPublicacion}>
-                Abrir en GitHub
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="boton boton--secundario"
+                  onClick={abrirPublicacion}
+                  disabled={instalando}
+                >
+                  Abrir en GitHub
+                </button>
+                <button type="button" className="boton" onClick={() => void instalar()} disabled={instalando}>
+                  {instalando ? 'Instalando…' : 'Descargar e instalar'}
+                </button>
+              </>
             )}
           </div>
         </>

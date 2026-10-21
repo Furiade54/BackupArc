@@ -26,3 +26,27 @@
   line-height: 1.55;
   white-space: pre-wrap;
 }
+
+.actualizacion__progreso {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.actualizacion__barra {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--texto) 8%, transparent);
+  box-shadow: inset 0 0 0 1px var(--borde);
+}
+
+.actualizacion__barra-relleno {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--acento);
+  box-shadow: 0 0 10px rgba(200, 234, 251, 0.45);
+  transition: width 0.2s ease;
+}

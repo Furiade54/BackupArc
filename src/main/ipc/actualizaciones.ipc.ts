@@ -1,7 +1,7 @@
 import { ipcMain, shell } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels';
 import type { ResultadoActualizacion, ResultadoIpc } from '../../shared/types/api.types';
-import { buscarActualizaciones } from '../services/actualizaciones.service';
+import { buscarActualizaciones, instalarActualizacion } from '../services/actualizaciones.service';
 import { validarRemitente } from './remitente';
 
 const PREFIJO_PUBLICACION = 'https://github.com/Furiade54/BackupArc/releases';
@@ -32,6 +32,16 @@ export function registrarIpcActualizaciones(): void {
       }
 
       await shell.openExternal(url);
+      return { ok: true, datos: undefined };
+    } catch (error) {
+      return { ok: false, error: mensajeError(error) };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ACTUALIZACIONES_INSTALAR, async (evento): Promise<ResultadoIpc<void>> => {
+    try {
+      validarRemitente(evento);
+      await instalarActualizacion();
       return { ok: true, datos: undefined };
     } catch (error) {
       return { ok: false, error: mensajeError(error) };

@@ -33,6 +33,12 @@ export interface ResultadoActualizacion {
   mensaje: string | null;
 }
 
+export interface ProgresoDescargaActualizacion {
+  porcentaje: number;
+  descargado: number;
+  total: number;
+}
+
 export interface EstadoConexion {
   configurada: boolean;
   conectado: boolean;
@@ -78,6 +84,10 @@ export interface ApiElectron {
   actualizaciones: {
     buscar: () => Promise<ResultadoIpc<ResultadoActualizacion>>;
     abrir: (url: string) => Promise<ResultadoIpc<void>>;
+    instalar: () => Promise<ResultadoIpc<void>>;
+    alProgresoDescarga: (
+      callback: (progreso: ProgresoDescargaActualizacion) => void,
+    ) => () => void;
   };
   respaldos: {
     listar: () => Promise<ResultadoIpc<RespaldoConfigurado[]>>;

@@ -1,20 +1,38 @@
-import { app } from 'electron';
+import { spawn } from 'node:child_process';
+import { createWriteStream } from 'node:fs';
+import path from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { app, BrowserWindow } from 'electron';
 import { CLAVES_CONFIGURACION } from '../../shared/constants/configuracion';
-import type { ResultadoActualizacion } from '../../shared/types/api.types';
+import { IPC_CHANNELS } from '../../shared/constants/ipc-channels';
+import type {
+  ProgresoDescargaActualizacion,
+  ResultadoActualizacion,
+} from '../../shared/types/api.types';
 import { avisarActualizacionDisponible } from '../tray';
 import { logger } from '../utils/logger';
+import { marcarSalida } from '../window';
 import { obtenerPreferenciaConDefecto } from './local-database.service';
 
 const REPOSITORIO = 'Furiade54/BackupArc';
 const URL_ULTIMA_PUBLICACION = `https://api.github.com/repos/${REPOSITORIO}/releases/latest`;
+const PREFIJO_DESCARGA = `https://github.com/${REPOSITORIO}/releases/download/`;
 const INTERVALO_COMPROBACION_MS = 6 * 60 * 60 * 1000;
 const RETRASO_INICIAL_MS = 30_000;
 const TIEMPO_LIMITE_MS = 15_000;
+const INTERVALO_PROGRESO_MS = 200;
+
+interface ActivoPublicacion {
+  name?: string;
+  browser_download_url?: string;
+}
 
 interface PublicacionGitHub {
   tag_name?: string;
   html_url?: string;
   body?: string;
+  assets?: ActivoPublicacion[];
 }
 
 let temporizador: NodeJS.Timeout | null = null;
@@ -143,6 +161,118 @@ export async function buscarActualizaciones(): Promise<ResultadoActualizacion> {
   } finally {
     clearTimeout(limiteTiempo);
   }
+}
+
+function notificarProgresoDescarga(progreso: ProgresoDescargaActualizacion): void {
+  for (const ventana of BrowserWindow.getAllWindows()) {
+    if (!ventana.isDestroyed() && !ventana.webContents.isDestroyed()) {
+      ventana.webContents.send(IPC_CHANNELS.ACTUALIZACIONES_PROGRESO, progreso);
+    }
+  }
+}
+
+async function obtenerInstalador(): Promise<{ url: string; version: string }> {
+  const versionActual = app.getVersion();
+  const respuesta = await fetch(URL_ULTIMA_PUBLICACION, {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': `BackupArc/${versionActual}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+  });
+
+  if (!respuesta.ok) {
+    throw new Error(`GitHub respondió con el código ${respuesta.status}.`);
+  }
+
+  const publicacion = (await respuesta.json()) as PublicacionGitHub;
+  const version = publicacion.tag_name ? normalizarVersion(publicacion.tag_name) : '';
+
+  if (!version || compararVersiones(version, versionActual) <= 0) {
+    throw new Error('No hay una versión más reciente para instalar.');
+  }
+
+  const instalador = publicacion.assets?.find((activo) =>
+    (activo.name ?? '').toLowerCase().endsWith('.msi'),
+  );
+  const url = instalador?.browser_download_url ?? '';
+
+  if (!url.startsWith(PREFIJO_DESCARGA)) {
+    throw new Error('La publicación no incluye un instalador MSI válido.');
+  }
+
+  return { url, version };
+}
+
+async function descargarInstalador(url: string, version: string): Promise<string> {
+  const destino = path.join(app.getPath('temp'), `BackupArc-${version}.msi`);
+  const respuesta = await fetch(url, {
+    headers: {
+      Accept: 'application/octet-stream',
+      'User-Agent': `BackupArc/${app.getVersion()}`,
+    },
+  });
+
+  if (!respuesta.ok || !respuesta.body) {
+    throw new Error(`No se pudo descargar el instalador (código ${respuesta.status}).`);
+  }
+
+  const total = Number(respuesta.headers.get('content-length') ?? 0);
+  const origen = Readable.fromWeb(respuesta.body as Parameters<typeof Readable.fromWeb>[0]);
+  let descargado = 0;
+  let ultimoAviso = 0;
+
+  origen.on('data', (trozo: Buffer) => {
+    descargado += trozo.length;
+
+    const ahora = Date.now();
+
+    if (ahora - ultimoAviso < INTERVALO_PROGRESO_MS && descargado !== total) {
+      return;
+    }
+
+    ultimoAviso = ahora;
+    notificarProgresoDescarga({
+      porcentaje: total > 0 ? Math.min(100, Math.round((descargado / total) * 100)) : 0,
+      descargado,
+      total,
+    });
+  });
+
+  await pipeline(origen, createWriteStream(destino));
+  notificarProgresoDescarga({ porcentaje: 100, descargado, total: total || descargado });
+
+  return destino;
+}
+
+function ejecutarInstalador(rutaMsi: string): void {
+  const comando = [
+    'Start-Sleep -Seconds 2',
+    `Start-Process -FilePath 'msiexec.exe' -ArgumentList '/i "${rutaMsi.replace(/'/g, "''")}" /passive /norestart' -Verb RunAs`,
+  ].join('; ');
+
+  spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', comando], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+  }).unref();
+}
+
+export async function instalarActualizacion(): Promise<void> {
+  if (process.platform !== 'win32') {
+    throw new Error('La instalación automática solo está disponible en Windows.');
+  }
+
+  const { url, version } = await obtenerInstalador();
+  const rutaMsi = await descargarInstalador(url, version);
+
+  logger.info('Instalador descargado, iniciando instalación', rutaMsi);
+  ejecutarInstalador(rutaMsi);
+
+  setTimeout(() => {
+    marcarSalida();
+    app.quit();
+  }, 500);
 }
 
 function actualizacionesHabilitadas(): boolean {

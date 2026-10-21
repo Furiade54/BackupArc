@@ -1,6 +1,6 @@
 import { ipcRenderer, type IpcRendererEvent } from 'electron';
 import { IPC_CHANNELS } from '../shared/constants/ipc-channels';
-import type { ApiElectron, EstadoVentana } from '../shared/types/api.types';
+import type { ApiElectron, EstadoVentana, ProgresoDescargaActualizacion } from '../shared/types/api.types';
 
 export const api: ApiElectron = {
   app: {
@@ -52,6 +52,18 @@ export const api: ApiElectron = {
   actualizaciones: {
     buscar: () => ipcRenderer.invoke(IPC_CHANNELS.ACTUALIZACIONES_BUSCAR),
     abrir: (url) => ipcRenderer.invoke(IPC_CHANNELS.ACTUALIZACIONES_ABRIR, url),
+    instalar: () => ipcRenderer.invoke(IPC_CHANNELS.ACTUALIZACIONES_INSTALAR),
+    alProgresoDescarga: (callback) => {
+      const escuchar = (_evento: IpcRendererEvent, progreso: ProgresoDescargaActualizacion) => {
+        callback(progreso);
+      };
+
+      ipcRenderer.on(IPC_CHANNELS.ACTUALIZACIONES_PROGRESO, escuchar);
+
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.ACTUALIZACIONES_PROGRESO, escuchar);
+      };
+    },
   },
   respaldos: {
     listar: () => ipcRenderer.invoke(IPC_CHANNELS.RESPALDOS_LISTAR),
