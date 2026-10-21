@@ -144,12 +144,22 @@
   transition: width 0.4s ease;
 }
 
-.barra-ciclo__relleno--vigente {
+.barra-ciclo__relleno--reciente {
   background: var(--ok);
   box-shadow: 0 0 10px rgba(34, 197, 94, 0.35);
 }
 
-.barra-ciclo__relleno--vencido {
+.barra-ciclo__relleno--media {
+  background: var(--aviso);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.35);
+}
+
+.barra-ciclo__relleno--porVencer {
+  background: #fb923c;
+  box-shadow: 0 0 10px rgba(251, 146, 60, 0.4);
+}
+
+.barra-ciclo__relleno--vencida {
   background: var(--error);
   box-shadow: 0 0 10px rgba(239, 68, 68, 0.35);
 }

@@ -11,9 +11,10 @@ interface FilaRespaldo {
   nombre: string;
   origen: string;
   destino: string;
-  frecuencia_horas: number;
+  frecuencia_minutos: number;
   hora_ejecucion: string;
   retencion_dias: number;
+  copia_con_fecha: number;
   habilitado: number;
   ultima_ejecucion: string | null;
   proxima_ejecucion: string;
@@ -38,9 +39,10 @@ function mapearRespaldo(fila: FilaRespaldo): RespaldoConfigurado {
     nombre: fila.nombre,
     origen: fila.origen,
     destino: fila.destino,
-    frecuenciaHoras: fila.frecuencia_horas,
+    frecuenciaMinutos: fila.frecuencia_minutos,
     horaEjecucion: fila.hora_ejecucion,
     retencionDias: fila.retencion_dias,
+    copiaConFecha: fila.copia_con_fecha === 1,
     habilitado: fila.habilitado === 1,
     ultimaEjecucion: fila.ultima_ejecucion,
     proximaEjecucion: fila.proxima_ejecucion,
@@ -49,14 +51,27 @@ function mapearRespaldo(fila: FilaRespaldo): RespaldoConfigurado {
   };
 }
 
-export function calcularProximaEjecucion(horaEjecucion: string, frecuenciaHoras: number, desde: Date): string {
+const MINUTOS_POR_DIA = 1440;
+
+export function calcularProximaEjecucion(
+  horaEjecucion: string,
+  frecuenciaMinutos: number,
+  desde: Date,
+): string {
+  const proxima = new Date(desde.getTime() + frecuenciaMinutos * 60 * 1000);
+
+  // Por debajo de un día la frecuencia es un intervalo puro desde la última
+  // ejecución; la hora fijada solo aplica a frecuencias diarias o mayores.
+  if (frecuenciaMinutos < MINUTOS_POR_DIA) {
+    return proxima.toISOString();
+  }
+
   const [horas, minutos] = horaEjecucion.split(':').map(Number);
-  const proxima = new Date(desde.getTime() + frecuenciaHoras * 60 * 60 * 1000);
 
   proxima.setHours(horas, minutos, 0, 0);
 
   if (proxima.getTime() <= desde.getTime()) {
-    proxima.setDate(proxima.getDate() + 1);
+    proxima.setTime(proxima.getTime() + frecuenciaMinutos * 60 * 1000);
   }
 
   return proxima.toISOString();
@@ -73,7 +88,7 @@ export function listarRespaldos(): RespaldoConfigurado[] {
 export function crearRespaldo(datos: NuevoRespaldo): RespaldoConfigurado {
   const baseDatos = obtenerBaseDatosLocal();
   const creadoEn = new Date();
-  const proximaEjecucion = calcularProximaEjecucion(datos.horaEjecucion, datos.frecuenciaHoras, creadoEn);
+  const proximaEjecucion = calcularProximaEjecucion(datos.horaEjecucion, datos.frecuenciaMinutos, creadoEn);
 
   const resultado = baseDatos
     .prepare(`
@@ -81,22 +96,24 @@ export function crearRespaldo(datos: NuevoRespaldo): RespaldoConfigurado {
         nombre,
         origen,
         destino,
-        frecuencia_horas,
+        frecuencia_minutos,
         hora_ejecucion,
         retencion_dias,
+        copia_con_fecha,
         ultima_ejecucion,
         proxima_ejecucion,
         ultimo_estado,
         creado_en
-      ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 'pendiente', ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, 'pendiente', ?)
     `)
     .run(
       datos.nombre,
       datos.origen,
       datos.destino,
-      datos.frecuenciaHoras,
+      datos.frecuenciaMinutos,
       datos.horaEjecucion,
       datos.retencionDias,
+      datos.copiaConFecha ? 1 : 0,
       proximaEjecucion,
       creadoEn.toISOString(),
     );
@@ -114,7 +131,7 @@ export function crearRespaldo(datos: NuevoRespaldo): RespaldoConfigurado {
 
 export function actualizarRespaldo(id: number, datos: NuevoRespaldo): RespaldoConfigurado {
   const baseDatos = obtenerBaseDatosLocal();
-  const proximaEjecucion = calcularProximaEjecucion(datos.horaEjecucion, datos.frecuenciaHoras, new Date());
+  const proximaEjecucion = calcularProximaEjecucion(datos.horaEjecucion, datos.frecuenciaMinutos, new Date());
 
   const resultado = baseDatos
     .prepare(`
@@ -122,9 +139,10 @@ export function actualizarRespaldo(id: number, datos: NuevoRespaldo): RespaldoCo
       SET nombre = ?,
           origen = ?,
           destino = ?,
-          frecuencia_horas = ?,
+          frecuencia_minutos = ?,
           hora_ejecucion = ?,
           retencion_dias = ?,
+          copia_con_fecha = ?,
           proxima_ejecucion = ?
       WHERE id = ?
     `)
@@ -132,9 +150,10 @@ export function actualizarRespaldo(id: number, datos: NuevoRespaldo): RespaldoCo
       datos.nombre,
       datos.origen,
       datos.destino,
-      datos.frecuenciaHoras,
+      datos.frecuenciaMinutos,
       datos.horaEjecucion,
       datos.retencionDias,
+      datos.copiaConFecha ? 1 : 0,
       proximaEjecucion,
       id,
     );

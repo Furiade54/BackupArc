@@ -61,7 +61,7 @@ function restaurarDatosMigrados(conexion: DatabaseSync, datos: DatosMigrados): v
       nombre,
       origen,
       destino,
-      frecuencia_horas,
+      frecuencia_minutos,
       hora_ejecucion,
       retencion_dias,
       ultima_ejecucion,
@@ -77,7 +77,7 @@ function restaurarDatosMigrados(conexion: DatabaseSync, datos: DatosMigrados): v
       String(fila.nombre ?? ''),
       String(fila.base_datos ?? fila.origen ?? ''),
       String(fila.destino ?? ''),
-      Number(fila.frecuencia_horas ?? 24),
+      Number(fila.frecuencia_horas ?? 24) * 60,
       String(fila.hora_ejecucion ?? '03:00'),
       Number(fila.retencion_dias ?? 7),
       fila.ultima_ejecucion ? String(fila.ultima_ejecucion) : null,
@@ -132,9 +132,10 @@ export function inicializarBaseDatosLocal(): void {
       nombre TEXT NOT NULL,
       origen TEXT NOT NULL,
       destino TEXT NOT NULL,
-      frecuencia_horas INTEGER NOT NULL,
+      frecuencia_minutos INTEGER NOT NULL,
       hora_ejecucion TEXT NOT NULL,
       retencion_dias INTEGER NOT NULL,
+      copia_con_fecha INTEGER NOT NULL DEFAULT 1,
       habilitado INTEGER NOT NULL DEFAULT 1,
       ultima_ejecucion TEXT,
       proxima_ejecucion TEXT NOT NULL,
@@ -165,6 +166,18 @@ export function inicializarBaseDatosLocal(): void {
 
   if (!columnasRespaldos.some((columna) => columna.name === 'habilitado')) {
     conexion.exec('ALTER TABLE respaldos ADD COLUMN habilitado INTEGER NOT NULL DEFAULT 1');
+  }
+
+  if (!columnasRespaldos.some((columna) => columna.name === 'copia_con_fecha')) {
+    conexion.exec('ALTER TABLE respaldos ADD COLUMN copia_con_fecha INTEGER NOT NULL DEFAULT 1');
+  }
+
+  if (columnasRespaldos.some((columna) => columna.name === 'frecuencia_horas')) {
+    // Bases de datos creadas antes de admitir frecuencias en minutos.
+    conexion.exec(`
+      ALTER TABLE respaldos RENAME COLUMN frecuencia_horas TO frecuencia_minutos;
+      UPDATE respaldos SET frecuencia_minutos = frecuencia_minutos * 60;
+    `);
   }
 
   baseDatos = conexion;

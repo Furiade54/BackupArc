@@ -2,6 +2,7 @@ import type { RespaldoConfigurado } from '../../../shared/types/respaldo.types';
 import {
   ETIQUETAS_ESTADO,
   calcularPorcentajeCiclo,
+  formatearAntiguedad,
   formatearFecha,
   formatearFechaHora,
   formatearFrecuencia,
@@ -20,7 +21,7 @@ interface BackupCardProps {
   alAbrirMenuContextual: (respaldo: RespaldoConfigurado, posicion: { x: number; y: number }) => void;
 }
 
-type EstadoBarra = 'vigente' | 'vencido' | 'deshabilitado';
+type EstadoBarra = 'reciente' | 'media' | 'porVencer' | 'vencida' | 'deshabilitado';
 
 function IconoPapelera() {
   return (
@@ -54,10 +55,28 @@ function IconoReproducir() {
 }
 
 const ETIQUETAS_BARRA: Record<EstadoBarra, string> = {
-  vigente: 'Vigente',
-  vencido: 'Vencida',
+  reciente: 'Reciente',
+  media: 'Antigüedad media',
+  porVencer: 'Por vencer',
+  vencida: 'Vencida',
   deshabilitado: 'Deshabilitada',
 };
+
+function estadoPorcentaje(porcentaje: number): EstadoBarra {
+  if (porcentaje >= 100) {
+    return 'vencida';
+  }
+
+  if (porcentaje >= 75) {
+    return 'porVencer';
+  }
+
+  if (porcentaje >= 50) {
+    return 'media';
+  }
+
+  return 'reciente';
+}
 
 export function BackupCard({
   respaldo,
@@ -70,10 +89,15 @@ export function BackupCard({
   alAbrirMenuContextual,
 }: BackupCardProps) {
   const inicioCiclo = respaldo.ultimaEjecucion ?? respaldo.creadoEn;
-  const vencido = ahora > new Date(respaldo.proximaEjecucion).getTime();
-  const estadoBarra: EstadoBarra = !respaldo.habilitado ? 'deshabilitado' : vencido ? 'vencido' : 'vigente';
-  const porcentaje = vencido ? 100 : calcularPorcentajeCiclo(inicioCiclo, respaldo.proximaEjecucion, ahora);
+  // La barra mide la antigüedad del último respaldo: 0 % recién copiado y
+  // 100 % cuando vence. Una ejecución fallida la deja llena en rojo.
+  const vencio = ahora > new Date(respaldo.proximaEjecucion).getTime();
+  const fallo = respaldo.ultimoEstado === 'error';
+  const porcentaje = vencio || fallo ? 100 : calcularPorcentajeCiclo(inicioCiclo, respaldo.proximaEjecucion, ahora);
   const porcentajeRedondeado = Math.round(porcentaje);
+  const estadoBarra: EstadoBarra = !respaldo.habilitado
+    ? 'deshabilitado'
+    : estadoPorcentaje(porcentaje);
 
   return (
     <article
@@ -117,7 +141,11 @@ export function BackupCard({
 
       <div className="tarjeta-respaldo__fila">
         <span>Última ejecución</span>
-        <strong>{respaldo.ultimaEjecucion ? formatearFecha(respaldo.ultimaEjecucion) : 'Sin ejecuciones'}</strong>
+        <strong title={respaldo.ultimaEjecucion ? formatearFechaHora(respaldo.ultimaEjecucion) : undefined}>
+          {respaldo.ultimaEjecucion
+            ? `${formatearFecha(respaldo.ultimaEjecucion)} · ${formatearAntiguedad(respaldo.ultimaEjecucion, ahora)}`
+            : 'Sin ejecuciones'}
+        </strong>
       </div>
 
       <div
@@ -129,18 +157,22 @@ export function BackupCard({
         aria-valuetext={
           ejecutando
             ? 'Ejecutando copia'
-            : `${ETIQUETAS_BARRA[estadoBarra]}: ${porcentajeRedondeado}% del ciclo hasta la próxima ejecución`
+            : `${ETIQUETAS_BARRA[estadoBarra]}: ${porcentajeRedondeado}% de antigüedad`
         }
-        title={ejecutando ? 'Ejecutando copia…' : `${ETIQUETAS_BARRA[estadoBarra]} · ${porcentajeRedondeado}% del ciclo`}
+        title={
+          ejecutando
+            ? 'Ejecutando copia…'
+            : `${ETIQUETAS_BARRA[estadoBarra]} · ${porcentajeRedondeado}% de antigüedad`
+        }
       >
         <span
           className={`barra-ciclo__relleno barra-ciclo__relleno--${estadoBarra}`}
-          style={{ width: ejecutando ? '100%' : `${porcentaje}%` }}
+          style={{ width: `${porcentaje}%` }}
         />
       </div>
 
       <p className="tarjeta-respaldo__repeticion">
-        Repetición {formatearFrecuencia(respaldo.frecuenciaHoras)}
+        Repetición {formatearFrecuencia(respaldo.frecuenciaMinutos)}
         {!respaldo.habilitado && ' · Deshabilitada'}
         {ejecutando && (
           <span className="indicador-ejecucion">

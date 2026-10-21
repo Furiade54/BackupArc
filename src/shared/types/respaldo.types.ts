@@ -5,9 +5,10 @@ export interface RespaldoConfigurado {
   nombre: string;
   origen: string;
   destino: string;
-  frecuenciaHoras: number;
+  frecuenciaMinutos: number;
   horaEjecucion: string;
   retencionDias: number;
+  copiaConFecha: boolean;
   habilitado: boolean;
   ultimaEjecucion: string | null;
   proximaEjecucion: string;
@@ -19,9 +20,10 @@ export interface NuevoRespaldo {
   nombre: string;
   origen: string;
   destino: string;
-  frecuenciaHoras: number;
+  frecuenciaMinutos: number;
   horaEjecucion: string;
   retencionDias: number;
+  copiaConFecha: boolean;
 }
 
 export interface EjecucionRespaldo {

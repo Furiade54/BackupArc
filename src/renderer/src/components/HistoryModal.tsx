@@ -59,7 +59,7 @@ export function HistoryModal({ respaldo, alCerrar }: HistoryModalProps) {
         </div>
         <div>
           <dt>Frecuencia</dt>
-          <dd>{formatearFrecuencia(respaldo.frecuenciaHoras)}</dd>
+          <dd>{formatearFrecuencia(respaldo.frecuenciaMinutos)}</dd>
         </div>
         <div>
           <dt>Retención</dt>

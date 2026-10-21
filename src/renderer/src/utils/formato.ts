@@ -50,17 +50,56 @@ export function formatearFechaHora(valor: string): string {
   return `${formatearFecha(valor)} · ${formatoHora.format(fecha)}`;
 }
 
-export function formatearFrecuencia(horas: number): string {
-  if (!Number.isFinite(horas) || horas <= 0) {
+export function formatearFrecuencia(minutos: number): string {
+  if (!Number.isFinite(minutos) || minutos <= 0) {
     return '—';
   }
 
-  if (horas % 24 === 0) {
-    const dias = horas / 24;
+  if (minutos < 60) {
+    return `cada ${minutos} min`;
+  }
+
+  if (minutos % 1440 === 0) {
+    const dias = minutos / 1440;
     return dias === 1 ? 'cada 24 h' : `cada ${dias} días`;
   }
 
-  return `cada ${horas} h`;
+  if (minutos % 60 === 0) {
+    return `cada ${minutos / 60} h`;
+  }
+
+  return `cada ${minutos} min`;
+}
+
+export function formatearAntiguedad(valor: string | null, ahora: number): string {
+  if (!valor) {
+    return '—';
+  }
+
+  const fecha = fechaValida(valor);
+
+  if (!fecha) {
+    return '—';
+  }
+
+  const minutos = Math.max(0, Math.floor((ahora - fecha.getTime()) / 60_000));
+
+  if (minutos < 1) {
+    return 'hace un momento';
+  }
+
+  if (minutos < 60) {
+    return `hace ${minutos} min`;
+  }
+
+  const horas = Math.floor(minutos / 60);
+
+  if (horas < 24) {
+    return `hace ${horas} h`;
+  }
+
+  const dias = Math.floor(horas / 24);
+  return dias === 1 ? 'hace 1 día' : `hace ${dias} días`;
 }
 
 export function calcularPorcentajeCiclo(

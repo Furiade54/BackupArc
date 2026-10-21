@@ -19,7 +19,7 @@ import { validarRemitente } from './remitente';
 
 const MAX_NOMBRE = 80;
 const MAX_RUTA = 500;
-const MAX_FRECUENCIA_HORAS = 720;
+const MAX_FRECUENCIA_MINUTOS = 43_200;
 const MAX_RETENCION_DIAS = 3650;
 
 function mensajeError(error: unknown): string {
@@ -49,8 +49,10 @@ function validarTexto(valor: unknown, campo: string, maximo: number): string {
 }
 
 function validarFrecuencia(valor: unknown): number {
-  if (typeof valor !== 'number' || !Number.isInteger(valor) || valor < 1 || valor > MAX_FRECUENCIA_HORAS) {
-    throw new Error(`La frecuencia debe ser un número entero entre 1 y ${MAX_FRECUENCIA_HORAS} horas.`);
+  if (typeof valor !== 'number' || !Number.isInteger(valor) || valor < 1 || valor > MAX_FRECUENCIA_MINUTOS) {
+    throw new Error(
+      `La frecuencia debe ser un número entero de minutos entre 1 y ${MAX_FRECUENCIA_MINUTOS} (30 días).`,
+    );
   }
 
   return valor;
@@ -91,9 +93,10 @@ function validarNuevoRespaldo(datos: unknown): NuevoRespaldo {
     nombre: validarTexto(registro.nombre, 'nombre', MAX_NOMBRE),
     origen: validarTexto(registro.origen, 'origen', MAX_RUTA),
     destino: validarTexto(registro.destino, 'destino', MAX_RUTA),
-    frecuenciaHoras: validarFrecuencia(registro.frecuenciaHoras),
+    frecuenciaMinutos: validarFrecuencia(registro.frecuenciaMinutos),
     horaEjecucion: validarHora(registro.horaEjecucion),
     retencionDias: validarRetencion(registro.retencionDias),
+    copiaConFecha: validarBooleano(registro.copiaConFecha, 'copiaConFecha'),
   };
 }
 

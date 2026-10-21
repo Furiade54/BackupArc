@@ -63,10 +63,23 @@ async function copiarCarpeta(respaldo: RespaldoConfigurado, fecha: Date): Promis
   await fs.mkdir(destino, { recursive: true });
 
   const prefijo = slug(respaldo.nombre);
-  let rutaCopia = path.join(destino, `${prefijo}_${marcaTiempo(fecha)}`);
+  let rutaCopia: string;
 
-  if (await existeCarpeta(rutaCopia)) {
-    rutaCopia = `${rutaCopia}-${Date.now()}`;
+  if (respaldo.copiaConFecha) {
+    rutaCopia = path.join(destino, `${prefijo}_${marcaTiempo(fecha)}`);
+
+    if (await existeCarpeta(rutaCopia)) {
+      rutaCopia = `${rutaCopia}-${Date.now()}`;
+    }
+  } else {
+    // Sin fecha: una única carpeta que se reemplaza en cada ejecución.
+    rutaCopia = path.join(destino, prefijo);
+
+    if (rutaCopia === origen) {
+      throw new Error('La carpeta de copia coincidiría con la carpeta de origen.');
+    }
+
+    await fs.rm(rutaCopia, { recursive: true, force: true });
   }
 
   await fs.cp(origen, rutaCopia, { recursive: true, force: true, errorOnExist: false });
@@ -117,7 +130,7 @@ async function ejecutarRespaldoInterno(respaldo: RespaldoConfigurado): Promise<v
   const inicio = new Date();
   const proximaEjecucion = calcularProximaEjecucion(
     respaldo.horaEjecucion,
-    respaldo.frecuenciaHoras,
+    respaldo.frecuenciaMinutos,
     inicio,
   );
 

@@ -10,30 +10,44 @@ interface NewBackupModalProps {
 }
 
 const OPCIONES_FRECUENCIA = [
-  { valor: '12', etiqueta: 'Cada 12 horas' },
-  { valor: '24', etiqueta: 'Cada 24 horas' },
-  { valor: '168', etiqueta: 'Semanal' },
-  { valor: '720', etiqueta: 'Mensual' },
+  { valor: '3', etiqueta: 'Cada 3 minutos' },
+  { valor: '15', etiqueta: 'Cada 15 minutos' },
+  { valor: '30', etiqueta: 'Cada 30 minutos' },
+  { valor: '60', etiqueta: 'Cada hora' },
+  { valor: '120', etiqueta: 'Cada 2 horas' },
+  { valor: '360', etiqueta: 'Cada 6 horas' },
+  { valor: '720', etiqueta: 'Cada 12 horas' },
+  { valor: '1440', etiqueta: 'Cada 24 horas' },
+  { valor: '10080', etiqueta: 'Semanal' },
+  { valor: '43200', etiqueta: 'Mensual' },
 ];
 
-function opcionesFrecuencia(horas: number | null): typeof OPCIONES_FRECUENCIA {
-  if (horas === null || OPCIONES_FRECUENCIA.some((opcion) => Number(opcion.valor) === horas)) {
-    return OPCIONES_FRECUENCIA;
-  }
-
-  return [...OPCIONES_FRECUENCIA, { valor: String(horas), etiqueta: `Cada ${horas} horas` }];
-}
+const VALOR_PERSONALIZADO = 'personalizado';
+const MINUTOS_POR_DIA = 1440;
+const MAX_FRECUENCIA_MINUTOS = 43200;
 
 export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBackupModalProps) {
   const editando = respaldo !== null;
+  const minutosIniciales = respaldo?.frecuenciaMinutos ?? MINUTOS_POR_DIA;
+  const preseleccionInicial = OPCIONES_FRECUENCIA.some(
+    (opcion) => Number(opcion.valor) === minutosIniciales,
+  );
   const [nombre, setNombre] = useState(respaldo?.nombre ?? '');
   const [origen, setOrigen] = useState(respaldo?.origen ?? '');
   const [destino, setDestino] = useState(respaldo?.destino ?? '');
-  const [frecuencia, setFrecuencia] = useState(String(respaldo?.frecuenciaHoras ?? 24));
+  const [frecuencia, setFrecuencia] = useState(
+    preseleccionInicial ? String(minutosIniciales) : VALOR_PERSONALIZADO,
+  );
+  const [minutosPersonalizados, setMinutosPersonalizados] = useState(String(minutosIniciales));
   const [hora, setHora] = useState(respaldo?.horaEjecucion ?? '03:00');
   const [retencion, setRetencion] = useState(String(respaldo?.retencionDias ?? 7));
+  const [copiaConFecha, setCopiaConFecha] = useState(respaldo?.copiaConFecha ?? true);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+
+  const frecuenciaMinutos =
+    frecuencia === VALOR_PERSONALIZADO ? Number(minutosPersonalizados) : Number(frecuencia);
+  const usaHoraFija = frecuenciaMinutos >= MINUTOS_POR_DIA;
 
   const enviar = async (evento: FormEvent<HTMLFormElement>) => {
     evento.preventDefault();
@@ -41,7 +55,6 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
     const nombreLimpio = nombre.trim();
     const origenLimpio = origen.trim();
     const destinoLimpio = destino.trim();
-    const frecuenciaHoras = Number(frecuencia);
     const retencionDias = Number(retencion);
 
     if (!nombreLimpio) {
@@ -59,8 +72,12 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
       return;
     }
 
-    if (!Number.isInteger(frecuenciaHoras) || frecuenciaHoras < 1 || frecuenciaHoras > 720) {
-      setError('Selecciona una frecuencia válida.');
+    if (
+      !Number.isInteger(frecuenciaMinutos) ||
+      frecuenciaMinutos < 1 ||
+      frecuenciaMinutos > MAX_FRECUENCIA_MINUTOS
+    ) {
+      setError('La frecuencia debe ser un número entero de minutos entre 1 y 43200 (30 días).');
       return;
     }
 
@@ -77,9 +94,10 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
         nombre: nombreLimpio,
         origen: origenLimpio,
         destino: destinoLimpio,
-        frecuenciaHoras,
+        frecuenciaMinutos,
         horaEjecucion: hora,
         retencionDias,
+        copiaConFecha,
       };
 
       const resultado = respaldo
@@ -151,11 +169,12 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
               disabled={guardando}
               onChange={(evento) => setFrecuencia(evento.target.value)}
             >
-              {opcionesFrecuencia(respaldo?.frecuenciaHoras ?? null).map((opcion) => (
+              {OPCIONES_FRECUENCIA.map((opcion) => (
                 <option key={opcion.valor} value={opcion.valor}>
                   {opcion.etiqueta}
                 </option>
               ))}
+              <option value={VALOR_PERSONALIZADO}>Personalizado…</option>
             </select>
           </div>
 
@@ -165,10 +184,49 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
               id="backup-hora"
               type="time"
               value={hora}
-              disabled={guardando}
+              disabled={guardando || !usaHoraFija}
+              title={usaHoraFija ? undefined : 'Solo aplica a frecuencias de 24 horas o más.'}
               onChange={(evento) => setHora(evento.target.value)}
             />
+            {!usaHoraFija && (
+              <span className="campo__ayuda">Solo aplica a frecuencias de 24 horas o más.</span>
+            )}
           </div>
+        </div>
+
+        {frecuencia === VALOR_PERSONALIZADO && (
+          <div className="campo">
+            <label htmlFor="backup-frecuencia-minutos">Intervalo en minutos</label>
+            <input
+              id="backup-frecuencia-minutos"
+              type="number"
+              min={1}
+              max={MAX_FRECUENCIA_MINUTOS}
+              step={1}
+              value={minutosPersonalizados}
+              disabled={guardando}
+              onChange={(evento) => setMinutosPersonalizados(evento.target.value)}
+            />
+            <span className="campo__ayuda">Entre 1 y 43200 minutos (30 días).</span>
+          </div>
+        )}
+
+        <div className="campo">
+          <label htmlFor="backup-carpeta">Carpeta de la copia</label>
+          <select
+            id="backup-carpeta"
+            value={copiaConFecha ? 'fecha' : 'unica'}
+            disabled={guardando}
+            onChange={(evento) => setCopiaConFecha(evento.target.value === 'fecha')}
+          >
+            <option value="fecha">Con fecha y hora (Documentos_20261021-153000)</option>
+            <option value="unica">Sin fecha (sobrescribe la copia anterior)</option>
+          </select>
+          <span className="campo__ayuda">
+            {copiaConFecha
+              ? 'Cada ejecución crea una carpeta nueva y la retención borra las antiguas.'
+              : 'Siempre se guarda en la misma carpeta y se reemplaza en cada ejecución.'}
+          </span>
         </div>
 
         <div className="campo">
@@ -180,9 +238,12 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
             max={3650}
             step={1}
             value={retencion}
-            disabled={guardando}
+            disabled={guardando || !copiaConFecha}
             onChange={(evento) => setRetencion(evento.target.value)}
           />
+          {!copiaConFecha && (
+            <span className="campo__ayuda">No aplica cuando la copia sobrescribe la anterior.</span>
+          )}
         </div>
 
         {error && (
