@@ -76,7 +76,7 @@ export function UpdateModal({ resultado, buscando, alCerrar }: UpdateModalProps)
               <span className="actualizacion__estado">
                 {porcentaje < 100
                   ? `Descargando el instalador… ${porcentaje}%`
-                  : 'Iniciando el instalador…'}
+                  : 'Acepta el aviso de permisos de Windows para instalar…'}
               </span>
             </div>
           )}

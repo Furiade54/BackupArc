@@ -114,6 +114,19 @@ if ($existeRelease) {
   Write-Host "Release $etiqueta creado y publicado." -ForegroundColor Green
 }
 
+# Un release sin el MSI adjunto rompe la instalación automática de la app,
+# así que se verifica que el instalador haya quedado publicado.
+Invoke-Herramienta -Silencioso gh release view $etiqueta --json assets --jq '.assets | length'
+$totalActivos = 0
+[void][int]::TryParse("$script:salida".Trim(), [ref]$totalActivos)
+
+if ($totalActivos -lt 1) {
+  Write-Error "El release $etiqueta se publicó sin el instalador adjunto. Revisa la conexión y vuelve a ejecutar la publicación."
+  exit 1
+}
+
+Write-Host "Instalador adjunto al release ($totalActivos archivo)." -ForegroundColor Green
+
 $ErrorActionPreference = 'Continue'
 $urlRelease = gh release view $etiqueta --json url --jq '.url' 2>$null
 $ErrorActionPreference = 'Stop'

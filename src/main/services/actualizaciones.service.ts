@@ -243,17 +243,49 @@ async function descargarInstalador(url: string, version: string): Promise<string
   return destino;
 }
 
-function ejecutarInstalador(rutaMsi: string): void {
+// Lanza el instalador elevado. La promesa se resuelve cuando el usuario acepta
+// el aviso de permisos de Windows y se rechaza si lo cancela.
+function ejecutarInstalador(rutaMsi: string): Promise<void> {
+  const rutaSegura = rutaMsi.replace(/'/g, "''");
   const comando = [
-    'Start-Sleep -Seconds 2',
-    `Start-Process -FilePath 'msiexec.exe' -ArgumentList '/i "${rutaMsi.replace(/'/g, "''")}" /passive /norestart' -Verb RunAs`,
-  ].join('; ');
+    'Start-Sleep -Seconds 1',
+    'try {',
+    `  Start-Process -FilePath 'msiexec.exe' -ArgumentList '/i "${rutaSegura}" /passive /norestart' -Verb RunAs -ErrorAction Stop`,
+    '  exit 0',
+    '} catch {',
+    '  Write-Output $_.Exception.Message',
+    '  exit 1',
+    '}',
+  ].join('\n');
 
-  spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', comando], {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: true,
-  }).unref();
+  return new Promise((resolve, reject) => {
+    const hijo = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', comando], {
+      windowsHide: true,
+    });
+
+    let salida = '';
+
+    hijo.stdout?.on('data', (trozo: Buffer) => {
+      salida += trozo.toString();
+    });
+    hijo.stderr?.on('data', (trozo: Buffer) => {
+      salida += trozo.toString();
+    });
+    hijo.on('error', reject);
+    hijo.on('close', (codigo) => {
+      if (codigo === 0) {
+        resolve();
+        return;
+      }
+
+      logger.warn('No se pudo iniciar el instalador elevado', salida.trim());
+      reject(
+        new Error(
+          'No se concedieron los permisos de administrador. Acepta el aviso de Windows para instalar la actualización.',
+        ),
+      );
+    });
+  });
 }
 
 export async function instalarActualizacion(): Promise<void> {
@@ -264,13 +296,11 @@ export async function instalarActualizacion(): Promise<void> {
   const { url, version } = await obtenerInstalador();
   const rutaMsi = await descargarInstalador(url, version);
 
-  logger.info('Instalador descargado, iniciando instalación', rutaMsi);
-  ejecutarInstalador(rutaMsi);
+  logger.info('Instalador descargado, solicitando permisos de administrador', rutaMsi);
+  await ejecutarInstalador(rutaMsi);
 
-  setTimeout(() => {
-    marcarSalida();
-    app.quit();
-  }, 500);
+  marcarSalida();
+  app.quit();
 }
 
 function actualizacionesHabilitadas(): boolean {
