@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { app, BrowserWindow, shell, type BrowserWindowConstructorOptions } from 'electron';
-import { CLAVES_CONFIGURACION } from '../shared/constants/configuracion';
+import { ARGUMENTO_INICIO_OCULTO, CLAVES_CONFIGURACION } from '../shared/constants/configuracion';
 import { IPC_CHANNELS } from '../shared/constants/ipc-channels';
 import type { EstadoVentana } from '../shared/types/api.types';
 import { obtenerPreferenciaConDefecto } from './services/local-database.service';
@@ -23,7 +23,9 @@ export function marcarSalida(): void {
 
 export function crearVentanaPrincipal(): BrowserWindow {
   const esMac = process.platform === 'darwin';
+  const inicioOculto = process.argv.includes(ARGUMENTO_INICIO_OCULTO);
   const iniciarMinimizado =
+    inicioOculto ||
     obtenerPreferenciaConDefecto(CLAVES_CONFIGURACION.iniciarMinimizado, '0') === '1';
   const siempreVisible =
     obtenerPreferenciaConDefecto(CLAVES_CONFIGURACION.siempreVisible, '0') === '1';
@@ -84,7 +86,13 @@ export function crearVentanaPrincipal(): BrowserWindow {
     }
 
     evento.preventDefault();
-    ventana.hide();
+
+    if (ventana.webContents.isDestroyed()) {
+      ventana.hide();
+      return;
+    }
+
+    ventana.webContents.send(IPC_CHANNELS.VENTANA_SOLICITAR_CIERRE);
   });
 
   ventana.webContents.on('did-finish-load', () => {

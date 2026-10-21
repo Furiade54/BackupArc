@@ -1,6 +1,7 @@
-import { ipcMain } from 'electron';
+import { app, ipcMain } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels';
 import type { EstadoVentana } from '../../shared/types/api.types';
+import { marcarSalida } from '../window';
 import { validarRemitente } from './remitente';
 
 export function registrarIpcVentana(): void {
@@ -20,6 +21,16 @@ export function registrarIpcVentana(): void {
 
   ipcMain.handle(IPC_CHANNELS.VENTANA_CERRAR, (evento) => {
     validarRemitente(evento).close();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.VENTANA_OCULTAR, (evento) => {
+    validarRemitente(evento).hide();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.VENTANA_SALIR, (evento) => {
+    validarRemitente(evento);
+    marcarSalida();
+    app.quit();
   });
 
   ipcMain.handle(IPC_CHANNELS.VENTANA_ESTADO, (evento): EstadoVentana => ({

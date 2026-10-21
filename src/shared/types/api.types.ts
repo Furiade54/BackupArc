@@ -55,8 +55,11 @@ export interface ApiElectron {
     minimizar: () => Promise<void>;
     alternarMaximizado: () => Promise<void>;
     cerrar: () => Promise<void>;
+    ocultar: () => Promise<void>;
+    salir: () => Promise<void>;
     estado: () => Promise<EstadoVentana>;
     alCambiarEstado: (callback: (estado: EstadoVentana) => void) => () => void;
+    alSolicitarCierre: (callback: () => void) => () => void;
   };
   db: {
     estado: () => Promise<ResultadoIpc<EstadoConexion>>;

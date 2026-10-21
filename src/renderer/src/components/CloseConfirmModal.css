@@ -1,0 +1,27 @@
+.modal--compacto {
+  width: min(400px, 100%);
+}
+
+.cierre__texto {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.cierre__nota {
+  margin: 0 0 18px;
+  color: var(--texto-suave);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.cierre__acciones {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cierre__acciones .boton {
+  width: 100%;
+  padding: 10px 16px;
+}

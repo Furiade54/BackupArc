@@ -2,6 +2,7 @@ import path from 'node:path';
 import { app, BrowserWindow } from 'electron';
 import { config as cargarVariablesEntorno } from 'dotenv';
 import { registrarManejadoresIpc } from './ipc';
+import { sincronizarInicioAutomatico } from './ipc/configuracion.ipc';
 import { configurarMenu } from './menu';
 import { cerrarConexion } from './services/database.service';
 import { cerrarBaseDatosLocal, inicializarBaseDatosLocal } from './services/local-database.service';
@@ -43,6 +44,7 @@ if (!bloqueoInstancia) {
   app.whenReady().then(() => {
     try {
       inicializarBaseDatosLocal();
+      sincronizarInicioAutomatico();
       iniciarProgramador();
       iniciarComprobadorActualizaciones();
     } catch (error) {

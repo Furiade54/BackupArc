@@ -6,9 +6,10 @@ interface ModalProps {
   titulo: string;
   alCerrar: () => void;
   children: ReactNode;
+  clase?: string;
 }
 
-export function Modal({ titulo, alCerrar, children }: ModalProps) {
+export function Modal({ titulo, alCerrar, children, clase }: ModalProps) {
   const idTitulo = useId();
   const dialogoRef = useRef<HTMLDivElement>(null);
   const alCerrarRef = useRef(alCerrar);
@@ -46,7 +47,7 @@ export function Modal({ titulo, alCerrar, children }: ModalProps) {
       }}
     >
       <div
-        className="modal"
+        className={`modal${clase ? ` ${clase}` : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={idTitulo}

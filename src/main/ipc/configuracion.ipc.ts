@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { CLAVES_CONFIGURACION } from '../../shared/constants/configuracion';
+import { ARGUMENTO_INICIO_OCULTO, CLAVES_CONFIGURACION } from '../../shared/constants/configuracion';
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels';
 import type {
   ClaveConfiguracionAvanzada,
@@ -67,6 +67,24 @@ export function obtenerConfiguracionAvanzada(): ConfiguracionAvanzada {
   };
 }
 
+function opcionesInicioAutomatico(abrir: boolean): Electron.Settings {
+  return {
+    openAtLogin: abrir,
+    ...(process.platform === 'win32' ? { args: [ARGUMENTO_INICIO_OCULTO] } : {}),
+    ...(process.platform === 'darwin' ? { openAsHidden: true } : {}),
+  };
+}
+
+export function sincronizarInicioAutomatico(): void {
+  if (!app.isPackaged || !app.getLoginItemSettings().openAtLogin) {
+    return;
+  }
+
+  // Refresca el registro para que el arranque con Windows incluya el
+  // argumento que mantiene la ventana oculta en la bandeja.
+  app.setLoginItemSettings(opcionesInicioAutomatico(true));
+}
+
 function actualizarConfiguracion(
   clave: ClaveConfiguracionAvanzada,
   valor: boolean,
@@ -82,7 +100,7 @@ function actualizarConfiguracion(
   }
 
   if (clave === 'iniciarConSistema' && app.isPackaged) {
-    app.setLoginItemSettings({ openAtLogin: valor });
+    app.setLoginItemSettings(opcionesInicioAutomatico(valor));
   }
 
   if (clave === 'buscarActualizaciones' && valor) {

@@ -11,6 +11,8 @@ export const api: ApiElectron = {
     minimizar: () => ipcRenderer.invoke(IPC_CHANNELS.VENTANA_MINIMIZAR),
     alternarMaximizado: () => ipcRenderer.invoke(IPC_CHANNELS.VENTANA_ALTERNAR_MAXIMIZADO),
     cerrar: () => ipcRenderer.invoke(IPC_CHANNELS.VENTANA_CERRAR),
+    ocultar: () => ipcRenderer.invoke(IPC_CHANNELS.VENTANA_OCULTAR),
+    salir: () => ipcRenderer.invoke(IPC_CHANNELS.VENTANA_SALIR),
     estado: () => ipcRenderer.invoke(IPC_CHANNELS.VENTANA_ESTADO),
     alCambiarEstado: (callback) => {
       const escuchar = (_evento: IpcRendererEvent, estado: EstadoVentana) => {
@@ -21,6 +23,17 @@ export const api: ApiElectron = {
 
       return () => {
         ipcRenderer.removeListener(IPC_CHANNELS.VENTANA_ESTADO_CAMBIADA, escuchar);
+      };
+    },
+    alSolicitarCierre: (callback) => {
+      const escuchar = () => {
+        callback();
+      };
+
+      ipcRenderer.on(IPC_CHANNELS.VENTANA_SOLICITAR_CIERRE, escuchar);
+
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.VENTANA_SOLICITAR_CIERRE, escuchar);
       };
     },
   },

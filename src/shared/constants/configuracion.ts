@@ -1,3 +1,5 @@
+export const ARGUMENTO_INICIO_OCULTO = '--oculto';
+
 export const CLAVES_CONFIGURACION = {
   siempreVisible: 'configuracion.siempre-visible',
   iniciarConSistema: 'configuracion.iniciar-con-sistema',

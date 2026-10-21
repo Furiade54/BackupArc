@@ -3,6 +3,7 @@ import type { InfoAplicacion, ResultadoActualizacion } from '../../shared/types/
 import type { RespaldoConfigurado } from '../../shared/types/respaldo.types';
 import { AdvancedSettings } from './components/AdvancedSettings';
 import { BackupCard } from './components/BackupCard';
+import { CloseConfirmModal } from './components/CloseConfirmModal';
 import { ConfirmDeleteModal } from './components/ConfirmDeleteModal';
 import { ContextMenu, type OpcionMenu } from './components/ContextMenu';
 import { HistoryModal } from './components/HistoryModal';
@@ -32,6 +33,7 @@ function App() {
   const [modalNuevoAbierto, setModalNuevoAbierto] = useState(false);
   const [modalConfiguracionAbierto, setModalConfiguracionAbierto] = useState(false);
   const [modalActualizacionAbierto, setModalActualizacionAbierto] = useState(false);
+  const [dialogoCierreAbierto, setDialogoCierreAbierto] = useState(false);
   const [buscandoActualizacion, setBuscandoActualizacion] = useState(false);
   const [resultadoActualizacion, setResultadoActualizacion] = useState<ResultadoActualizacion | null>(null);
   const [respaldoEditar, setRespaldoEditar] = useState<RespaldoConfigurado | null>(null);
@@ -90,6 +92,12 @@ function App() {
     return () => {
       window.clearInterval(temporizador);
     };
+  }, []);
+
+  useEffect(() => {
+    return window.api.ventana.alSolicitarCierre(() => {
+      setDialogoCierreAbierto(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -248,6 +256,16 @@ function App() {
     },
     [recargarRespaldos],
   );
+
+  const mantenerEnSegundoPlano = useCallback(() => {
+    setDialogoCierreAbierto(false);
+    void window.api.ventana.ocultar();
+  }, []);
+
+  const cerrarPorCompleto = useCallback(() => {
+    setDialogoCierreAbierto(false);
+    void window.api.ventana.salir();
+  }, []);
 
   const alEliminarCopia = useCallback(() => {
     setRespaldoEliminar(null);
@@ -466,6 +484,14 @@ function App() {
           respaldo={respaldoEliminar}
           alCerrar={() => setRespaldoEliminar(null)}
           alEliminado={alEliminarCopia}
+        />
+      )}
+
+      {dialogoCierreAbierto && (
+        <CloseConfirmModal
+          alCancelar={() => setDialogoCierreAbierto(false)}
+          alMantenerEnSegundoPlano={mantenerEnSegundoPlano}
+          alCerrarPorCompleto={cerrarPorCompleto}
         />
       )}
     </>

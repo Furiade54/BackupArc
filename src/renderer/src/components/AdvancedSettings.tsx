@@ -19,9 +19,9 @@ interface OpcionAjuste {
 const OPCIONES: OpcionAjuste[] = [
   {
     clave: 'mantenerEnSegundoPlano',
-    titulo: 'Mantener en segundo plano al cerrar',
+    titulo: 'Preguntar al cerrar la ventana',
     descripcion:
-      'Si se cierra con la X, BackupArc sigue activo en la bandeja y las copias programadas se ejecutan.',
+      'Al pulsar la X, permite elegir entre seguir en la bandeja o cerrar por completo. Si se desactiva, la X cierra la aplicación.',
   },
   {
     clave: 'iniciarMinimizado',
@@ -36,7 +36,8 @@ const OPCIONES: OpcionAjuste[] = [
   {
     clave: 'iniciarConSistema',
     titulo: 'Cargar al iniciar el sistema',
-    descripcion: 'Abre BackupArc automáticamente al iniciar sesión en Windows.',
+    descripcion:
+      'Abre BackupArc automáticamente al iniciar sesión en Windows, oculto en la bandeja del sistema.',
     requiereInstalada: true,
   },
   {
