@@ -2,7 +2,8 @@ $ErrorActionPreference = 'Stop'
 
 # Ejecuta herramientas externas sin que PowerShell convierta su stderr
 # en una excepción cuando se redirige (comportamiento de PowerShell 5).
-# El código de salida queda en $script:ultimoCodigo.
+# El código de salida queda en $script:ultimoCodigo y, en modo silencioso,
+# la salida de texto en $script:salida.
 function Invoke-Herramienta {
   param(
     [switch]$Silencioso,
@@ -15,7 +16,7 @@ function Invoke-Herramienta {
 
   try {
     if ($Silencioso) {
-      & $Comando @Argumentos *> $null
+      $script:salida = & $Comando @Argumentos 2>$null
     } else {
       & $Comando @Argumentos | Out-Host
     }
@@ -80,6 +81,22 @@ if ($existeRelease) {
   if ($script:ultimoCodigo -ne 0) {
     Write-Error 'No se pudo subir el MSI al release existente.'
     exit 1
+  }
+
+  # GitHub no devuelve los releases en borrador en /releases/latest, así que
+  # la app no los detecta como actualización. Se publican automáticamente.
+  Invoke-Herramienta -Silencioso gh release view $etiqueta --json isDraft --jq '.isDraft'
+  $esBorrador = ($script:ultimoCodigo -eq 0) -and ("$script:salida".Trim() -eq 'true')
+
+  if ($esBorrador) {
+    Invoke-Herramienta gh release edit $etiqueta --draft=false --latest
+
+    if ($script:ultimoCodigo -ne 0) {
+      Write-Error "El release $etiqueta estaba en borrador y no se pudo publicar."
+      exit 1
+    }
+
+    Write-Host "Release $etiqueta estaba en borrador y se publicó." -ForegroundColor Green
   }
 
   Write-Host "Release $etiqueta actualizado con el nuevo instalador." -ForegroundColor Green
