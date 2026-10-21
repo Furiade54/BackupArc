@@ -171,7 +171,7 @@ export function avisarYaEnEjecucion(): void {
 export function avisarActualizacionDisponible(version: string, urlPublicacion: string): void {
   mostrarAviso(
     `Nueva versión disponible: ${version}`,
-    'Hay una actualización de BackupArc publicada en GitHub. Haz clic en este aviso para abrir la publicación.',
+    'Hay una nueva versión de BackupArc disponible. Haz clic en este aviso para ver los detalles.',
     () => {
       void shell.openExternal(urlPublicacion);
     },

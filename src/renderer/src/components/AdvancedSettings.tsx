@@ -48,9 +48,9 @@ const OPCIONES: OpcionAjuste[] = [
   },
   {
     clave: 'buscarActualizaciones',
-    titulo: 'Buscar actualizaciones periódicamente (recomendado)',
+    titulo: 'Buscar actualizaciones automáticamente (recomendado)',
     descripcion:
-      'Consulta GitHub Releases cada 6 horas y avisa cuando haya una versión nueva disponible.',
+      'Comprueba si hay una versión nueva al abrir la aplicación y avisa cuando esté disponible.',
   },
 ];
 

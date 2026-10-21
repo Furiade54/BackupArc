@@ -20,14 +20,6 @@ export function UpdateModal({ resultado, buscando, alCerrar }: UpdateModalProps)
     });
   }, []);
 
-  const abrirPublicacion = () => {
-    if (!resultado?.urlPublicacion) {
-      return;
-    }
-
-    void window.api.actualizaciones.abrir(resultado.urlPublicacion);
-  };
-
   const instalar = async () => {
     setInstalando(true);
     setErrorInstalacion(null);
@@ -43,7 +35,7 @@ export function UpdateModal({ resultado, buscando, alCerrar }: UpdateModalProps)
 
   return (
     <Modal titulo="Buscar actualizaciones" alCerrar={alCerrar}>
-      {buscando && <p className="actualizacion__estado">Consultando GitHub Releases…</p>}
+      {buscando && <p className="actualizacion__estado">Buscando actualizaciones…</p>}
 
       {!buscando && resultado && (
         <>
@@ -105,20 +97,10 @@ export function UpdateModal({ resultado, buscando, alCerrar }: UpdateModalProps)
               Cerrar
             </button>
 
-            {resultado.estado === 'disponible' && resultado.urlPublicacion && (
-              <>
-                <button
-                  type="button"
-                  className="boton boton--secundario"
-                  onClick={abrirPublicacion}
-                  disabled={instalando}
-                >
-                  Abrir en GitHub
-                </button>
-                <button type="button" className="boton" onClick={() => void instalar()} disabled={instalando}>
-                  {instalando ? 'Instalando…' : 'Descargar e instalar'}
-                </button>
-              </>
+            {resultado.estado === 'disponible' && (
+              <button type="button" className="boton" onClick={() => void instalar()} disabled={instalando}>
+                {instalando ? 'Instalando…' : 'Descargar e instalar'}
+              </button>
             )}
           </div>
         </>

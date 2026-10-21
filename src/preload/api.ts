@@ -51,7 +51,6 @@ export const api: ApiElectron = {
   },
   actualizaciones: {
     buscar: () => ipcRenderer.invoke(IPC_CHANNELS.ACTUALIZACIONES_BUSCAR),
-    abrir: (url) => ipcRenderer.invoke(IPC_CHANNELS.ACTUALIZACIONES_ABRIR, url),
     instalar: () => ipcRenderer.invoke(IPC_CHANNELS.ACTUALIZACIONES_INSTALAR),
     alProgresoDescarga: (callback) => {
       const escuchar = (_evento: IpcRendererEvent, progreso: ProgresoDescargaActualizacion) => {

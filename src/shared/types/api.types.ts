@@ -83,7 +83,6 @@ export interface ApiElectron {
   };
   actualizaciones: {
     buscar: () => Promise<ResultadoIpc<ResultadoActualizacion>>;
-    abrir: (url: string) => Promise<ResultadoIpc<void>>;
     instalar: () => Promise<ResultadoIpc<void>>;
     alProgresoDescarga: (
       callback: (progreso: ProgresoDescargaActualizacion) => void,

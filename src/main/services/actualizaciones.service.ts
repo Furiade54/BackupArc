@@ -18,10 +18,9 @@ import { obtenerPreferenciaConDefecto } from './local-database.service';
 const REPOSITORIO = 'Furiade54/BackupArc';
 const URL_ULTIMA_PUBLICACION = `https://api.github.com/repos/${REPOSITORIO}/releases/latest`;
 const PREFIJO_DESCARGA = `https://github.com/${REPOSITORIO}/releases/download/`;
-const INTERVALO_COMPROBACION_MS = 6 * 60 * 60 * 1000;
-const RETRASO_INICIAL_MS = 30_000;
 const TIEMPO_LIMITE_MS = 15_000;
 const INTERVALO_PROGRESO_MS = 200;
+const RETRASO_INICIAL_MS = 10_000;
 
 interface ActivoPublicacion {
   name?: string;
@@ -35,7 +34,6 @@ interface PublicacionGitHub {
   assets?: ActivoPublicacion[];
 }
 
-let temporizador: NodeJS.Timeout | null = null;
 let comprobacionInicial: NodeJS.Timeout | null = null;
 let comprobando = false;
 let versionAvisada: string | null = null;
@@ -104,7 +102,7 @@ export async function buscarActualizaciones(): Promise<ResultadoActualizacion> {
     if (respuesta.status === 404) {
       return {
         ...resultadoBase('actualizado', versionActual),
-        mensaje: 'Todavía no hay versiones publicadas en GitHub.',
+        mensaje: 'Todavía no hay versiones publicadas.',
       };
     }
 
@@ -114,8 +112,8 @@ export async function buscarActualizaciones(): Promise<ResultadoActualizacion> {
       return {
         ...resultadoBase('error', versionActual),
         mensaje: limiteAlcanzado
-          ? 'Se alcanzó el límite de consultas a GitHub. Inténtalo más tarde.'
-          : `GitHub respondió con el código ${respuesta.status}.`,
+          ? 'Se alcanzó el límite de consultas. Inténtalo más tarde.'
+          : `La consulta respondió con el código ${respuesta.status}.`,
       };
     }
 
@@ -125,7 +123,7 @@ export async function buscarActualizaciones(): Promise<ResultadoActualizacion> {
     if (!versionDisponible) {
       return {
         ...resultadoBase('error', versionActual),
-        mensaje: 'La publicación de GitHub no incluye una versión válida.',
+        mensaje: 'La publicación no incluye una versión válida.',
       };
     }
 
@@ -155,8 +153,8 @@ export async function buscarActualizaciones(): Promise<ResultadoActualizacion> {
       ...resultadoBase('error', versionActual),
       mensaje:
         error instanceof Error && error.name === 'AbortError'
-          ? 'La consulta a GitHub tardó demasiado.'
-          : 'No se pudo conectar con GitHub. Revisa tu conexión a internet.',
+          ? 'La consulta tardó demasiado.'
+          : 'No se pudo conectar con el servidor de actualizaciones. Revisa tu conexión a internet.',
     };
   } finally {
     clearTimeout(limiteTiempo);
@@ -182,7 +180,7 @@ async function obtenerInstalador(): Promise<{ url: string; version: string }> {
   });
 
   if (!respuesta.ok) {
-    throw new Error(`GitHub respondió con el código ${respuesta.status}.`);
+    throw new Error(`La consulta respondió con el código ${respuesta.status}.`);
   }
 
   const publicacion = (await respuesta.json()) as PublicacionGitHub;
@@ -299,7 +297,7 @@ async function comprobarEnSegundoPlano(): Promise<void> {
       avisarActualizacionDisponible(resultado.versionDisponible, resultado.urlPublicacion);
     }
   } catch (error) {
-    logger.warn('Falló la comprobación periódica de actualizaciones', error);
+    logger.warn('Falló la comprobación de actualizaciones', error);
   } finally {
     comprobando = false;
   }
@@ -310,31 +308,25 @@ export function comprobarActualizacionesAhora(): void {
 }
 
 export function iniciarComprobadorActualizaciones(): void {
-  if (temporizador) {
+  if (comprobacionInicial) {
     return;
   }
 
+  // Una única comprobación por arranque: la app se abre manualmente o desde
+  // el inicio con Windows según la preferencia del usuario.
   comprobacionInicial = setTimeout(() => {
+    comprobacionInicial = null;
     void comprobarEnSegundoPlano();
   }, RETRASO_INICIAL_MS);
 
-  temporizador = setInterval(() => {
-    void comprobarEnSegundoPlano();
-  }, INTERVALO_COMPROBACION_MS);
-
-  logger.info('Comprobador de actualizaciones iniciado');
+  logger.info('Comprobación de actualizaciones programada para este inicio');
 }
 
 export function detenerComprobadorActualizaciones(): void {
-  if (comprobacionInicial) {
-    clearTimeout(comprobacionInicial);
-    comprobacionInicial = null;
-  }
-
-  if (!temporizador) {
+  if (!comprobacionInicial) {
     return;
   }
 
-  clearInterval(temporizador);
-  temporizador = null;
+  clearTimeout(comprobacionInicial);
+  comprobacionInicial = null;
 }
