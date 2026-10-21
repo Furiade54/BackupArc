@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { InfoAplicacion } from '../../shared/types/api.types';
+import type { InfoAplicacion, ResultadoActualizacion } from '../../shared/types/api.types';
 import type { RespaldoConfigurado } from '../../shared/types/respaldo.types';
 import { AdvancedSettings } from './components/AdvancedSettings';
 import { BackupCard } from './components/BackupCard';
@@ -10,6 +10,7 @@ import { Modal } from './components/Modal';
 import { NewBackupModal } from './components/NewBackupModal';
 import { Sidebar } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
+import { UpdateModal } from './components/UpdateModal';
 
 const TITULOS_SECCION: Record<string, string> = {
   'seccion-copias': 'Copias de seguridad',
@@ -30,6 +31,9 @@ function App() {
   const [ahora, setAhora] = useState(() => Date.now());
   const [modalNuevoAbierto, setModalNuevoAbierto] = useState(false);
   const [modalConfiguracionAbierto, setModalConfiguracionAbierto] = useState(false);
+  const [modalActualizacionAbierto, setModalActualizacionAbierto] = useState(false);
+  const [buscandoActualizacion, setBuscandoActualizacion] = useState(false);
+  const [resultadoActualizacion, setResultadoActualizacion] = useState<ResultadoActualizacion | null>(null);
   const [respaldoEditar, setRespaldoEditar] = useState<RespaldoConfigurado | null>(null);
   const [respaldoHistorial, setRespaldoHistorial] = useState<RespaldoConfigurado | null>(null);
   const [respaldoEliminar, setRespaldoEliminar] = useState<RespaldoConfigurado | null>(null);
@@ -263,9 +267,39 @@ function App() {
     [recargarRespaldos],
   );
 
-  const buscarActualizaciones = useCallback(() => {
-    console.info('Buscar actualizaciones: pendiente de conectar con GitHub Releases.');
-  }, []);
+  const buscarActualizaciones = useCallback(async () => {
+    setModalActualizacionAbierto(true);
+    setBuscandoActualizacion(true);
+    setResultadoActualizacion(null);
+
+    try {
+      const respuesta = await window.api.actualizaciones.buscar();
+
+      if (respuesta.ok) {
+        setResultadoActualizacion(respuesta.datos);
+      } else {
+        setResultadoActualizacion({
+          estado: 'error',
+          versionActual: info?.version ?? '',
+          versionDisponible: null,
+          urlPublicacion: null,
+          notas: null,
+          mensaje: respuesta.error,
+        });
+      }
+    } catch {
+      setResultadoActualizacion({
+        estado: 'error',
+        versionActual: info?.version ?? '',
+        versionDisponible: null,
+        urlPublicacion: null,
+        notas: null,
+        mensaje: 'No se pudo buscar actualizaciones.',
+      });
+    } finally {
+      setBuscandoActualizacion(false);
+    }
+  }, [info?.version]);
 
   let opcionesMenu: OpcionMenu[] = [];
 
@@ -308,6 +342,7 @@ function App() {
         plataforma={window.api.app.plataforma}
         titulo={TITULOS_SECCION[seccionActiva] ?? 'Copias de seguridad'}
         menuAbierto={menuAbierto}
+        buscandoActualizacion={buscandoActualizacion}
         alAlternarMenu={alternarMenu}
         alCrearCopia={abrirNuevaCopia}
         alBuscarActualizaciones={buscarActualizaciones}
@@ -393,6 +428,14 @@ function App() {
           y={menuContextual.y}
           opciones={opcionesMenu}
           alCerrar={() => setMenuContextual(null)}
+        />
+      )}
+
+      {modalActualizacionAbierto && (
+        <UpdateModal
+          resultado={resultadoActualizacion}
+          buscando={buscandoActualizacion}
+          alCerrar={() => setModalActualizacionAbierto(false)}
         />
       )}
 

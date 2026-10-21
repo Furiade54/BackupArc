@@ -139,6 +139,22 @@
   box-shadow: inset 0 0 0 2px var(--acento);
 }
 
+.barra-titulo__accion:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.barra-titulo__girando {
+  display: grid;
+  animation: barra-titulo-girar 0.9s linear infinite;
+}
+
+@keyframes barra-titulo-girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .barra-titulo--mac .barra-titulo__accion {
   margin-right: 10px;
 }
@@ -200,5 +216,9 @@
 @media (prefers-reduced-motion: reduce) {
   .barra-titulo__control {
     transition: none;
+  }
+
+  .barra-titulo__girando {
+    animation: none;
   }
 }

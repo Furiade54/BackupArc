@@ -1,5 +1,14 @@
 import path from 'node:path';
-import { app, BrowserWindow, Menu, nativeImage, Notification, Tray, type NativeImage } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  Menu,
+  nativeImage,
+  Notification,
+  shell,
+  Tray,
+  type NativeImage,
+} from 'electron';
 import { CLAVES_CONFIGURACION } from '../shared/constants/configuracion';
 import { obtenerPreferenciaConDefecto } from './services/local-database.service';
 import { logger } from './utils/logger';
@@ -7,6 +16,7 @@ import { crearVentanaPrincipal } from './window';
 
 let bandeja: Tray | null = null;
 let avisoSegundoPlanoMostrado = false;
+let accionAvisoPendiente: (() => void) | null = null;
 
 function raizIconos(): string {
   return app.isPackaged
@@ -53,7 +63,7 @@ function cargarIconoAviso(): NativeImage {
   return nativeImage.createEmpty();
 }
 
-function mostrarAviso(titulo: string, mensaje: string): void {
+function mostrarAviso(titulo: string, mensaje: string, alHacerClic?: () => void): void {
   if (obtenerPreferenciaConDefecto(CLAVES_CONFIGURACION.mostrarAvisos, '1') === '0') {
     return;
   }
@@ -62,6 +72,7 @@ function mostrarAviso(titulo: string, mensaje: string): void {
   const opcionesIcono = imagen.isEmpty() ? {} : { icon: imagen };
 
   if (process.platform === 'win32' && bandeja) {
+    accionAvisoPendiente = alHacerClic ?? null;
     bandeja.displayBalloon({
       title: titulo,
       content: mensaje,
@@ -73,12 +84,18 @@ function mostrarAviso(titulo: string, mensaje: string): void {
   }
 
   if (Notification.isSupported()) {
-    new Notification({
+    const notificacion = new Notification({
       title: titulo,
       body: mensaje,
       silent: true,
       ...opcionesIcono,
-    }).show();
+    });
+
+    if (alHacerClic) {
+      notificacion.on('click', alHacerClic);
+    }
+
+    notificacion.show();
   }
 }
 
@@ -120,6 +137,11 @@ export function crearBandeja(): void {
   );
 
   bandeja.on('click', mostrarVentanaPrincipal);
+  bandeja.on('balloon-click', () => {
+    const accion = accionAvisoPendiente;
+    accionAvisoPendiente = null;
+    accion?.();
+  });
 }
 
 export function destruirBandeja(): void {
@@ -143,5 +165,15 @@ export function avisarYaEnEjecucion(): void {
   mostrarAviso(
     'BackupArc ya está en ejecución',
     'La aplicación ya está abierta. Se muestra la ventana existente para evitar procesos duplicados.',
+  );
+}
+
+export function avisarActualizacionDisponible(version: string, urlPublicacion: string): void {
+  mostrarAviso(
+    `Nueva versión disponible: ${version}`,
+    'Hay una actualización de BackupArc publicada en GitHub. Haz clic en este aviso para abrir la publicación.',
+    () => {
+      void shell.openExternal(urlPublicacion);
+    },
   );
 }

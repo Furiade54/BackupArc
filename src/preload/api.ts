@@ -36,6 +36,10 @@ export const api: ApiElectron = {
     actualizar: (clave, valor) =>
       ipcRenderer.invoke(IPC_CHANNELS.CONFIGURACION_ACTUALIZAR, clave, valor),
   },
+  actualizaciones: {
+    buscar: () => ipcRenderer.invoke(IPC_CHANNELS.ACTUALIZACIONES_BUSCAR),
+    abrir: (url) => ipcRenderer.invoke(IPC_CHANNELS.ACTUALIZACIONES_ABRIR, url),
+  },
   respaldos: {
     listar: () => ipcRenderer.invoke(IPC_CHANNELS.RESPALDOS_LISTAR),
     crear: (datos) => ipcRenderer.invoke(IPC_CHANNELS.RESPALDOS_CREAR, datos),

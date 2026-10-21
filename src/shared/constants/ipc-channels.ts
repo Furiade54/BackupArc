@@ -11,6 +11,8 @@ export const IPC_CHANNELS = {
   PREFERENCIAS_GUARDAR: 'preferencias:guardar',
   CONFIGURACION_OBTENER: 'configuracion:obtener',
   CONFIGURACION_ACTUALIZAR: 'configuracion:actualizar',
+  ACTUALIZACIONES_BUSCAR: 'actualizaciones:buscar',
+  ACTUALIZACIONES_ABRIR: 'actualizaciones:abrir',
   RESPALDOS_LISTAR: 'respaldos:listar',
   RESPALDOS_CREAR: 'respaldos:crear',
   RESPALDOS_ACTUALIZAR: 'respaldos:actualizar',

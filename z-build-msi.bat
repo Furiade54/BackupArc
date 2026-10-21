@@ -15,7 +15,20 @@ if errorlevel 1 (
 )
 
 echo.
-echo MSI generado en:
-echo %~dp0out-msi\make\wix\x64
+echo Publicando el release en GitHub...
+echo.
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\publish-release.ps1"
+
+if errorlevel 1 (
+  echo.
+  echo La publicacion del release en GitHub fallo.
+  pause
+  exit /b 1
+)
+
+echo.
+echo Build y release completados.
+echo MSI local: %~dp0out-msi\make\wix\x64
 echo.
 pause

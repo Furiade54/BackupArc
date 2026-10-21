@@ -2,6 +2,7 @@ import { app, ipcMain } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels';
 import type { EstadoConexion, InfoAplicacion, ResultadoIpc } from '../../shared/types/api.types';
 import { comprobarConexion } from '../services/database.service';
+import { registrarIpcActualizaciones } from './actualizaciones.ipc';
 import { registrarIpcArchivos } from './archivos.ipc';
 import { registrarIpcConfiguracion } from './configuracion.ipc';
 import { registrarIpcPreferencias } from './preferencias.ipc';
@@ -34,5 +35,6 @@ export function registrarManejadoresIpc(): void {
   registrarIpcVentana();
   registrarIpcPreferencias();
   registrarIpcConfiguracion();
+  registrarIpcActualizaciones();
   registrarIpcRespaldos();
 }

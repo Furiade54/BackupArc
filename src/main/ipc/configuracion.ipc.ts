@@ -10,6 +10,7 @@ import {
   guardarPreferencia,
   obtenerPreferenciaConDefecto,
 } from '../services/local-database.service';
+import { comprobarActualizacionesAhora } from '../services/actualizaciones.service';
 import { validarRemitente } from './remitente';
 
 const CLAVES_VALIDAS: ClaveConfiguracionAvanzada[] = [
@@ -18,6 +19,7 @@ const CLAVES_VALIDAS: ClaveConfiguracionAvanzada[] = [
   'iniciarMinimizado',
   'mostrarAvisos',
   'mantenerEnSegundoPlano',
+  'buscarActualizaciones',
 ];
 
 function esClaveValida(valor: unknown): valor is ClaveConfiguracionAvanzada {
@@ -61,6 +63,7 @@ export function obtenerConfiguracionAvanzada(): ConfiguracionAvanzada {
     iniciarMinimizado: leerBooleano(CLAVES_CONFIGURACION.iniciarMinimizado, false),
     mostrarAvisos: leerBooleano(CLAVES_CONFIGURACION.mostrarAvisos, true),
     mantenerEnSegundoPlano: leerBooleano(CLAVES_CONFIGURACION.mantenerEnSegundoPlano, true),
+    buscarActualizaciones: leerBooleano(CLAVES_CONFIGURACION.buscarActualizaciones, true),
   };
 }
 
@@ -80,6 +83,10 @@ function actualizarConfiguracion(
 
   if (clave === 'iniciarConSistema' && app.isPackaged) {
     app.setLoginItemSettings({ openAtLogin: valor });
+  }
+
+  if (clave === 'buscarActualizaciones' && valor) {
+    comprobarActualizacionesAhora();
   }
 
   return obtenerConfiguracionAvanzada();

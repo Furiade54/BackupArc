@@ -6,6 +6,7 @@ interface TitleBarProps {
   plataforma: string;
   titulo: string;
   menuAbierto: boolean;
+  buscandoActualizacion: boolean;
   alAlternarMenu: () => void;
   alCrearCopia: () => void;
   alBuscarActualizaciones: () => void;
@@ -87,6 +88,7 @@ export function TitleBar({
   plataforma,
   titulo,
   menuAbierto,
+  buscandoActualizacion,
   alAlternarMenu,
   alCrearCopia,
   alBuscarActualizaciones,
@@ -172,10 +174,14 @@ export function TitleBar({
           className="barra-titulo__accion"
           aria-label="Buscar actualizaciones"
           title="Buscar actualizaciones"
+          aria-busy={buscandoActualizacion}
+          disabled={buscandoActualizacion}
           onClick={alBuscarActualizaciones}
           onDoubleClick={(evento) => evento.stopPropagation()}
         >
-          <IconoActualizar />
+          <span className={buscandoActualizacion ? 'barra-titulo__girando' : undefined}>
+            <IconoActualizar />
+          </span>
         </button>
 
         <button

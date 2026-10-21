@@ -45,6 +45,12 @@ const OPCIONES: OpcionAjuste[] = [
     descripcion:
       'Notifica cuando la aplicación pasa a segundo plano o cuando se intenta abrir una segunda instancia.',
   },
+  {
+    clave: 'buscarActualizaciones',
+    titulo: 'Buscar actualizaciones periódicamente (recomendado)',
+    descripcion:
+      'Consulta GitHub Releases cada 6 horas y avisa cuando haya una versión nueva disponible.',
+  },
 ];
 
 export function AdvancedSettings({ empaquetada }: AdvancedSettingsProps) {

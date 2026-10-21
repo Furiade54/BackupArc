@@ -6,6 +6,10 @@ import { configurarMenu } from './menu';
 import { cerrarConexion } from './services/database.service';
 import { cerrarBaseDatosLocal, inicializarBaseDatosLocal } from './services/local-database.service';
 import { detenerProgramador, iniciarProgramador } from './services/respaldo-ejecucion.service';
+import {
+  detenerComprobadorActualizaciones,
+  iniciarComprobadorActualizaciones,
+} from './services/actualizaciones.service';
 import { avisarEjecucionSegundoPlano, avisarYaEnEjecucion, crearBandeja, destruirBandeja, mostrarVentanaPrincipal } from './tray';
 import { logger } from './utils/logger';
 import { crearVentanaPrincipal, marcarSalida } from './window';
@@ -40,6 +44,7 @@ if (!bloqueoInstancia) {
     try {
       inicializarBaseDatosLocal();
       iniciarProgramador();
+      iniciarComprobadorActualizaciones();
     } catch (error) {
       logger.error('No se pudo inicializar la base de datos local', error);
     }
@@ -75,6 +80,7 @@ if (!bloqueoInstancia) {
   app.on('before-quit', () => {
     marcarSalida();
     detenerProgramador();
+    detenerComprobadorActualizaciones();
     destruirBandeja();
     cerrarBaseDatosLocal();
     void cerrarConexion();

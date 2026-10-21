@@ -19,9 +19,19 @@ export interface ConfiguracionAvanzada {
   iniciarMinimizado: boolean;
   mostrarAvisos: boolean;
   mantenerEnSegundoPlano: boolean;
+  buscarActualizaciones: boolean;
 }
 
 export type ClaveConfiguracionAvanzada = keyof ConfiguracionAvanzada;
+
+export interface ResultadoActualizacion {
+  estado: 'actualizado' | 'disponible' | 'error';
+  versionActual: string;
+  versionDisponible: string | null;
+  urlPublicacion: string | null;
+  notas: string | null;
+  mensaje: string | null;
+}
 
 export interface EstadoConexion {
   configurada: boolean;
@@ -61,6 +71,10 @@ export interface ApiElectron {
       clave: ClaveConfiguracionAvanzada,
       valor: boolean,
     ) => Promise<ResultadoIpc<ConfiguracionAvanzada>>;
+  };
+  actualizaciones: {
+    buscar: () => Promise<ResultadoIpc<ResultadoActualizacion>>;
+    abrir: (url: string) => Promise<ResultadoIpc<void>>;
   };
   respaldos: {
     listar: () => Promise<ResultadoIpc<RespaldoConfigurado[]>>;

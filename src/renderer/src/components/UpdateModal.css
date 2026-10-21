@@ -1,0 +1,28 @@
+.actualizacion__texto {
+  margin: 0 0 14px;
+  line-height: 1.6;
+}
+
+.actualizacion__texto strong {
+  color: #fff;
+}
+
+.actualizacion__estado {
+  margin: 0;
+  color: var(--texto-suave);
+  font-size: 13px;
+}
+
+.actualizacion__notas {
+  max-height: 220px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  overflow-y: auto;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--fondo-panel-suave) 65%, transparent);
+  color: var(--texto-suave);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
