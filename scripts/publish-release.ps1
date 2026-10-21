@@ -1,5 +1,31 @@
 $ErrorActionPreference = 'Stop'
 
+# Ejecuta herramientas externas sin que PowerShell convierta su stderr
+# en una excepción cuando se redirige (comportamiento de PowerShell 5).
+# El código de salida queda en $script:ultimoCodigo.
+function Invoke-Herramienta {
+  param(
+    [switch]$Silencioso,
+    [Parameter(Mandatory = $true)][string]$Comando,
+    [Parameter(ValueFromRemainingArguments = $true)][string[]]$Argumentos
+  )
+
+  $anterior = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+
+  try {
+    if ($Silencioso) {
+      & $Comando @Argumentos *> $null
+    } else {
+      & $Comando @Argumentos | Out-Host
+    }
+
+    $script:ultimoCodigo = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $anterior
+  }
+}
+
 $raiz = Split-Path -Parent $PSScriptRoot
 Set-Location $raiz
 
@@ -26,16 +52,18 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
   exit 1
 }
 
-gh auth status *> $null
+Invoke-Herramienta -Silencioso gh auth status
 
-if ($LASTEXITCODE -ne 0) {
+if ($script:ultimoCodigo -ne 0) {
   Write-Error 'GitHub CLI no está autenticado. Ejecuta "gh auth login" antes de publicar.'
   exit 1
 }
 
+$ErrorActionPreference = 'Continue'
 $rama = git rev-parse --abbrev-ref HEAD 2>$null
 $commitLocal = git rev-parse HEAD 2>$null
 $commitRemoto = git rev-parse "origin/$rama" 2>$null
+$ErrorActionPreference = 'Stop'
 
 if ($commitLocal -and $commitRemoto -and $commitLocal -ne $commitRemoto) {
   Write-Warning "El commit local no coincide con origin/$rama. El release apuntará al código publicado en GitHub; haz push si quieres que coincida."
@@ -43,13 +71,13 @@ if ($commitLocal -and $commitRemoto -and $commitLocal -ne $commitRemoto) {
 
 Write-Host "Publicando $($msi.Name) en el release $etiqueta..." -ForegroundColor Cyan
 
-gh release view $etiqueta *> $null
-$existeRelease = ($LASTEXITCODE -eq 0)
+Invoke-Herramienta -Silencioso gh release view $etiqueta
+$existeRelease = ($script:ultimoCodigo -eq 0)
 
 if ($existeRelease) {
-  gh release upload $etiqueta $msi.FullName --clobber
+  Invoke-Herramienta gh release upload $etiqueta $msi.FullName --clobber
 
-  if ($LASTEXITCODE -ne 0) {
+  if ($script:ultimoCodigo -ne 0) {
     Write-Error 'No se pudo subir el MSI al release existente.'
     exit 1
   }
@@ -59,9 +87,9 @@ if ($existeRelease) {
   $fecha = (Get-Date).ToString('yyyy/MM/dd HH:mm')
   $notas = "Instalador MSI de BackupArc $version.`n`nGenerado el $fecha."
 
-  gh release create $etiqueta $msi.FullName --title "BackupArc $version" --notes $notas --latest
+  Invoke-Herramienta gh release create $etiqueta $msi.FullName --title "BackupArc $version" --notes $notas --latest
 
-  if ($LASTEXITCODE -ne 0) {
+  if ($script:ultimoCodigo -ne 0) {
     Write-Error 'No se pudo crear el release en GitHub.'
     exit 1
   }
@@ -69,8 +97,10 @@ if ($existeRelease) {
   Write-Host "Release $etiqueta creado y publicado." -ForegroundColor Green
 }
 
-$urlRelease = gh release view $etiqueta --json url --jq '.url'
+$ErrorActionPreference = 'Continue'
+$urlRelease = gh release view $etiqueta --json url --jq '.url' 2>$null
+$ErrorActionPreference = 'Stop'
 
-if ($LASTEXITCODE -eq 0 -and $urlRelease) {
+if ($urlRelease) {
   Write-Host "Release: $urlRelease" -ForegroundColor Green
 }
