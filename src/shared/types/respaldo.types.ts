@@ -1,8 +1,12 @@
 export type EstadoRespaldo = 'ok' | 'advertencia' | 'error' | 'pendiente';
 
+export type TipoRespaldo = 'archivos' | 'mssql';
+
 export interface RespaldoConfigurado {
   id: number;
   nombre: string;
+  tipo: TipoRespaldo;
+  /** Ruta de origen para archivos; nombre de la base de datos para MSSQL. */
   origen: string;
   destino: string;
   frecuenciaMinutos: number;
@@ -19,6 +23,7 @@ export interface RespaldoConfigurado {
 
 export interface NuevoRespaldo {
   nombre: string;
+  tipo: TipoRespaldo;
   origen: string;
   destino: string;
   frecuenciaMinutos: number;

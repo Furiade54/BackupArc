@@ -130,6 +130,7 @@ export function inicializarBaseDatosLocal(): void {
     CREATE TABLE IF NOT EXISTS respaldos (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nombre TEXT NOT NULL,
+      tipo TEXT NOT NULL DEFAULT 'archivos',
       origen TEXT NOT NULL,
       destino TEXT NOT NULL,
       frecuencia_minutos INTEGER NOT NULL,
@@ -167,6 +168,10 @@ export function inicializarBaseDatosLocal(): void {
 
   if (!columnasRespaldos.some((columna) => columna.name === 'habilitado')) {
     conexion.exec('ALTER TABLE respaldos ADD COLUMN habilitado INTEGER NOT NULL DEFAULT 1');
+  }
+
+  if (!columnasRespaldos.some((columna) => columna.name === 'tipo')) {
+    conexion.exec("ALTER TABLE respaldos ADD COLUMN tipo TEXT NOT NULL DEFAULT 'archivos'");
   }
 
   if (!columnasRespaldos.some((columna) => columna.name === 'copia_con_fecha')) {

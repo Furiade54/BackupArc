@@ -19,7 +19,7 @@ function IconoPanel() {
   );
 }
 
-function IconoAjustes() {
+export function IconoAjustes() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
       <path

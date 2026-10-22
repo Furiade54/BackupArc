@@ -40,6 +40,19 @@ export const api: ApiElectron = {
   db: {
     estado: () => ipcRenderer.invoke(IPC_CHANNELS.DB_ESTADO),
   },
+  dialogos: {
+    seleccionarCarpeta: (rutaInicial) =>
+      ipcRenderer.invoke(IPC_CHANNELS.DIALOGO_SELECCIONAR_CARPETA, rutaInicial),
+  },
+  sistema: {
+    abrirRuta: (ruta) => ipcRenderer.invoke(IPC_CHANNELS.SISTEMA_ABRIR_RUTA, ruta),
+  },
+  mssql: {
+    obtener: () => ipcRenderer.invoke(IPC_CHANNELS.MSSQL_OBTENER),
+    guardar: (datos) => ipcRenderer.invoke(IPC_CHANNELS.MSSQL_GUARDAR, datos),
+    probar: (datos) => ipcRenderer.invoke(IPC_CHANNELS.MSSQL_PROBAR, datos),
+    basesDatos: () => ipcRenderer.invoke(IPC_CHANNELS.MSSQL_BASES_DATOS),
+  },
   preferencias: {
     obtener: (clave) => ipcRenderer.invoke(IPC_CHANNELS.PREFERENCIAS_OBTENER, clave),
     guardar: (clave, valor) => ipcRenderer.invoke(IPC_CHANNELS.PREFERENCIAS_GUARDAR, clave, valor),

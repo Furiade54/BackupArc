@@ -3,12 +3,14 @@ import type {
   EstadoRespaldo,
   NuevoRespaldo,
   RespaldoConfigurado,
+  TipoRespaldo,
 } from '../../shared/types/respaldo.types';
 import { obtenerBaseDatosLocal } from '../services/local-database.service';
 
 interface FilaRespaldo {
   id: number;
   nombre: string;
+  tipo: string;
   origen: string;
   destino: string;
   frecuencia_minutos: number;
@@ -34,10 +36,15 @@ function esEstadoRespaldo(valor: string): valor is EstadoRespaldo {
   return valor === 'ok' || valor === 'advertencia' || valor === 'error' || valor === 'pendiente';
 }
 
+function esTipoRespaldo(valor: string): valor is TipoRespaldo {
+  return valor === 'archivos' || valor === 'mssql';
+}
+
 function mapearRespaldo(fila: FilaRespaldo): RespaldoConfigurado {
   return {
     id: fila.id,
     nombre: fila.nombre,
+    tipo: esTipoRespaldo(fila.tipo) ? fila.tipo : 'archivos',
     origen: fila.origen,
     destino: fila.destino,
     frecuenciaMinutos: fila.frecuencia_minutos,
@@ -137,6 +144,7 @@ export function crearRespaldo(datos: NuevoRespaldo): RespaldoConfigurado {
     .prepare(`
       INSERT INTO respaldos (
         nombre,
+        tipo,
         origen,
         destino,
         frecuencia_minutos,
@@ -148,10 +156,11 @@ export function crearRespaldo(datos: NuevoRespaldo): RespaldoConfigurado {
         proxima_ejecucion,
         ultimo_estado,
         creado_en
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'pendiente', ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'pendiente', ?)
     `)
     .run(
       datos.nombre,
+      datos.tipo,
       datos.origen,
       datos.destino,
       datos.frecuenciaMinutos,
@@ -182,6 +191,7 @@ export function actualizarRespaldo(id: number, datos: NuevoRespaldo): RespaldoCo
     .prepare(`
       UPDATE respaldos
       SET nombre = ?,
+          tipo = ?,
           origen = ?,
           destino = ?,
           frecuencia_minutos = ?,
@@ -194,6 +204,7 @@ export function actualizarRespaldo(id: number, datos: NuevoRespaldo): RespaldoCo
     `)
     .run(
       datos.nombre,
+      datos.tipo,
       datos.origen,
       datos.destino,
       datos.frecuenciaMinutos,

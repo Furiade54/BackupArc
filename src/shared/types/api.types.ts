@@ -48,6 +48,34 @@ export interface EstadoConexion {
   version?: string;
 }
 
+export interface ConfiguracionMssql {
+  servidor: string;
+  puerto: number;
+  baseDatos: string;
+  usuario: string;
+  /** Vacío al guardar conserva la contraseña que ya estaba almacenada. */
+  contrasena: string;
+  /** encrypt: exige TLS en la conexión. */
+  cifrado: boolean;
+  /** trustServerCertificate: acepta certificados no firmados por una CA de confianza. */
+  confiarCertificado: boolean;
+}
+
+export interface ResumenConfiguracionMssql extends Omit<ConfiguracionMssql, 'contrasena'> {
+  tieneContrasena: boolean;
+}
+
+export interface ResultadoPruebaMssql {
+  ok: boolean;
+  mensaje: string;
+  version?: string;
+}
+
+export interface BaseDatosMssql {
+  nombre: string;
+  estado: string;
+}
+
 export interface EstadoVentana {
   maximizada: boolean;
 }
@@ -69,6 +97,18 @@ export interface ApiElectron {
   };
   db: {
     estado: () => Promise<ResultadoIpc<EstadoConexion>>;
+  };
+  dialogos: {
+    seleccionarCarpeta: (rutaInicial?: string) => Promise<ResultadoIpc<string | null>>;
+  };
+  sistema: {
+    abrirRuta: (ruta: string) => Promise<ResultadoIpc<void>>;
+  };
+  mssql: {
+    obtener: () => Promise<ResultadoIpc<ResumenConfiguracionMssql>>;
+    guardar: (datos: ConfiguracionMssql) => Promise<ResultadoIpc<ResumenConfiguracionMssql>>;
+    probar: (datos: ConfiguracionMssql) => Promise<ResultadoIpc<ResultadoPruebaMssql>>;
+    basesDatos: () => Promise<ResultadoIpc<BaseDatosMssql[]>>;
   };
   preferencias: {
     obtener: (clave: string) => Promise<ResultadoIpc<string | null>>;

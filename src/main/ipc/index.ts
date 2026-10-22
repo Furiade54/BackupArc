@@ -5,6 +5,8 @@ import { comprobarConexion } from '../services/database.service';
 import { registrarIpcActualizaciones } from './actualizaciones.ipc';
 import { registrarIpcArchivos } from './archivos.ipc';
 import { registrarIpcConfiguracion } from './configuracion.ipc';
+import { registrarIpcDialogos } from './dialogos.ipc';
+import { registrarIpcMssql } from './mssql.ipc';
 import { registrarIpcPreferencias } from './preferencias.ipc';
 import { registrarIpcRespaldos } from './respaldos.ipc';
 import { registrarIpcVentana } from './ventana.ipc';
@@ -32,6 +34,8 @@ export function registrarManejadoresIpc(): void {
   });
 
   registrarIpcArchivos();
+  registrarIpcDialogos();
+  registrarIpcMssql();
   registrarIpcVentana();
   registrarIpcPreferencias();
   registrarIpcConfiguracion();

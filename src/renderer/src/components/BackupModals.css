@@ -1,7 +1,115 @@
+.modal--conexion {
+  width: min(460px, 100%);
+}
+
 .formulario {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.formulario--asistente {
+  gap: 12px;
+}
+
+.asistente__pasos {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.asistente__paso {
+  flex: 1;
+  min-width: 0;
+}
+
+.asistente__boton {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--borde);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--fondo-panel-suave) 55%, transparent);
+  color: var(--texto-suave);
+  font: inherit;
+  font-size: var(--texto-xs);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.asistente__boton:disabled {
+  cursor: default;
+}
+
+.asistente__numero {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--texto) 10%, transparent);
+  font-size: var(--texto-xs);
+}
+
+.asistente__etiqueta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asistente__paso--activo .asistente__boton {
+  border-color: color-mix(in srgb, var(--acento) 60%, var(--borde));
+  background: color-mix(in srgb, var(--acento) 14%, transparent);
+  color: #fff;
+}
+
+.asistente__paso--activo .asistente__numero {
+  background: var(--acento);
+  color: #0a2237;
+}
+
+.asistente__paso--completado .asistente__boton {
+  color: var(--texto);
+}
+
+.asistente__paso--completado .asistente__numero {
+  background: color-mix(in srgb, var(--ok) 28%, transparent);
+  color: #bbf7d0;
+}
+
+.asistente__contenido {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 168px;
+}
+
+.asistente__credenciales {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: #bbf7d0;
+  font-size: var(--texto-xs);
+  font-weight: 500;
+}
+
+.asistente__navegacion {
+  display: flex;
+  gap: 10px;
+}
+
+.formulario__acciones--asistente {
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0;
 }
 
 .formulario__fila {
@@ -48,6 +156,219 @@
 .campo input:disabled,
 .campo select:disabled {
   opacity: 0.6;
+}
+
+.campo__ruta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.campo__ruta input,
+.campo__ruta select {
+  flex: 1;
+  min-width: 0;
+}
+
+.campo__ruta .boton {
+  flex: none;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: var(--texto-md);
+}
+
+.campo__configurar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--fondo-panel-suave);
+  color: var(--texto-suave);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.campo__configurar:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--acento) 45%, var(--borde));
+  background: color-mix(in srgb, var(--acento) 16%, transparent);
+  color: var(--texto);
+}
+
+.campo__configurar:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(200, 234, 251, 0.2);
+}
+
+.campo__configurar:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* El engranaje titila cuando el tipo MSSQL aún no tiene credenciales. */
+.campo__configurar--pendiente {
+  border-color: color-mix(in srgb, var(--aviso) 65%, transparent);
+  background: color-mix(in srgb, var(--aviso) 16%, transparent);
+  color: #fde68a;
+  animation: configurar-pendiente 1.6s ease-in-out infinite;
+}
+
+.campo__configurar--pendiente:hover:not(:disabled) {
+  border-color: var(--aviso);
+  background: color-mix(in srgb, var(--aviso) 26%, transparent);
+  color: #fef3c7;
+}
+
+/* Latido doble tipo pulso: dos picos suaves y descanso. */
+@keyframes configurar-pendiente {
+  0%,
+  40%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+  }
+
+  10%,
+  25% {
+    transform: scale(1.12);
+    box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.35);
+  }
+
+  18% {
+    transform: scale(1);
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .campo__configurar--pendiente {
+    animation: none;
+  }
+}
+
+.campo__casillas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.campo__casilla {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--texto-suave);
+  font-size: var(--texto-sm);
+  cursor: pointer;
+  user-select: none;
+}
+
+.campo__casilla input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--borde);
+  border-radius: 4px;
+  background: var(--fondo-panel-suave);
+  accent-color: var(--acento);
+}
+
+.selector-bd__todas,
+.selector-bd__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--texto);
+  font-size: var(--texto-sm);
+  cursor: pointer;
+  user-select: none;
+}
+
+.selector-bd__todas {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--borde);
+  font-weight: 600;
+}
+
+.selector-bd {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 240px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.selector-bd__item {
+  padding: 7px 8px;
+  border-radius: 7px;
+  transition: background 0.12s ease;
+}
+
+.selector-bd__item:hover {
+  background: color-mix(in srgb, var(--texto) 6%, transparent);
+}
+
+.selector-bd__item--bloqueada {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.selector-bd__item input,
+.selector-bd__todas input {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--acento);
+}
+
+.selector-bd__nombre {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selector-bd__estado {
+  margin-left: auto;
+  color: var(--aviso);
+  font-size: var(--texto-xs);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.selector-bd__vacio {
+  padding: 14px;
+  color: var(--texto-suave);
+  font-size: var(--texto-sm);
+  text-align: center;
+}
+
+.conexion__resultado {
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  font-size: var(--texto-sm);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.conexion__resultado--ok {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.12);
+  color: #bbf7d0;
+}
+
+.conexion__resultado--error {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.1);
+  color: #fecaca;
 }
 
 .campo__ayuda {
@@ -106,6 +427,44 @@
   white-space: nowrap;
 }
 
+.resumen-respaldo__ruta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.resumen-respaldo__ruta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resumen-respaldo__abrir {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--borde);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--texto) 5%, transparent);
+  color: var(--texto-suave);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.resumen-respaldo__abrir:hover {
+  border-color: color-mix(in srgb, var(--acento) 45%, var(--borde));
+  background: color-mix(in srgb, var(--acento) 16%, transparent);
+  color: var(--texto);
+}
+
+.resumen-respaldo__abrir:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--acento);
+}
+
 .historial__titulo {
   margin: 0 0 10px;
   color: var(--texto-suave);
@@ -132,6 +491,40 @@
   border: 1px solid var(--borde);
   border-radius: 9px;
   background: color-mix(in srgb, var(--fondo-panel-suave) 55%, transparent);
+}
+
+.historial__item--abrible {
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.historial__item--abrible:hover,
+.historial__item--abrible:focus-visible {
+  border-color: color-mix(in srgb, var(--acento) 40%, var(--borde));
+  background: color-mix(in srgb, var(--acento) 8%, transparent);
+}
+
+.historial__item--abrible:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--acento);
+}
+
+.historial__acciones {
+  display: flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 8px;
+}
+
+.historial__abrir {
+  display: grid;
+  place-items: center;
+  color: var(--texto-suave);
+  transition: color 0.12s ease;
+}
+
+.historial__item--abrible:hover .historial__abrir {
+  color: var(--acento);
 }
 
 .historial__punto {

@@ -1,4 +1,4 @@
-import { createWriteStream, promises as fs } from 'node:fs';
+import { createWriteStream, promises as fs, type Stats } from 'node:fs';
 import path from 'node:path';
 import { ZipArchive, type ArchiverError } from 'archiver';
 import { BrowserWindow } from 'electron';
@@ -13,6 +13,8 @@ import {
   registrarEjecucionRespaldo,
 } from '../repositories/respaldos-local.repository';
 import { logger } from '../utils/logger';
+import { marcaTiempo, slug } from '../utils/nombres-respaldo';
+import { respaldarBasesDatosMssql } from './respaldo-mssql.service';
 
 const INTERVALO_COMPROBACION_MS = 60_000;
 const RETRASO_INICIAL_MS = 10_000;
@@ -20,26 +22,6 @@ const RETRASO_INICIAL_MS = 10_000;
 const enEjecucion = new Set<number>();
 let temporizador: NodeJS.Timeout | null = null;
 let comprobando = false;
-
-function slug(texto: string): string {
-  const limpio = texto
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40);
-
-  return limpio.length > 0 ? limpio : 'respaldo';
-}
-
-function marcaTiempo(fecha: Date): string {
-  const dosDigitos = (valor: number) => String(valor).padStart(2, '0');
-
-  return [
-    `${fecha.getFullYear()}${dosDigitos(fecha.getMonth() + 1)}${dosDigitos(fecha.getDate())}`,
-    `${dosDigitos(fecha.getHours())}${dosDigitos(fecha.getMinutes())}${dosDigitos(fecha.getSeconds())}`,
-  ].join('-');
-}
 
 async function existeCarpeta(ruta: string): Promise<boolean> {
   try {
@@ -59,52 +41,89 @@ async function existeRuta(ruta: string): Promise<boolean> {
   }
 }
 
-// Valida origen/destino y devuelve ambas rutas absolutas.
-async function prepararRutas(respaldo: RespaldoConfigurado): Promise<{ origen: string; destino: string }> {
-  const origen = path.resolve(respaldo.origen);
+interface OrigenRespaldo {
+  ruta: string;
+  esCarpeta: boolean;
+}
+
+// Valida origen/destino y devuelve el origen tipado junto al destino absoluto.
+async function prepararRutas(respaldo: RespaldoConfigurado): Promise<{ origen: OrigenRespaldo; destino: string }> {
+  const rutaOrigen = path.resolve(respaldo.origen);
   const destino = path.resolve(respaldo.destino);
 
-  if (destino === origen || destino.startsWith(`${origen}${path.sep}`)) {
-    throw new Error('La carpeta destino no puede estar dentro de la carpeta origen.');
+  let info: Stats;
+
+  try {
+    info = await fs.stat(rutaOrigen);
+  } catch {
+    throw new Error(`La ruta de origen no existe: ${rutaOrigen}`);
   }
 
-  if (!(await existeCarpeta(origen))) {
-    throw new Error(`La carpeta de origen no existe: ${origen}`);
+  const esCarpeta = info.isDirectory();
+
+  if (!esCarpeta && !info.isFile()) {
+    throw new Error(`El origen debe ser una carpeta o un archivo: ${rutaOrigen}`);
+  }
+
+  // Solo tiene sentido cuando el origen es una carpeta: el destino no puede
+  // quedar dentro de lo que se está copiando.
+  if (esCarpeta && (destino === rutaOrigen || destino.startsWith(`${rutaOrigen}${path.sep}`))) {
+    throw new Error('La carpeta destino no puede estar dentro de la carpeta origen.');
   }
 
   await fs.mkdir(destino, { recursive: true });
 
-  return { origen, destino };
+  return { origen: { ruta: rutaOrigen, esCarpeta }, destino };
 }
 
-async function copiarCarpeta(respaldo: RespaldoConfigurado, fecha: Date): Promise<string> {
+async function copiarOrigen(respaldo: RespaldoConfigurado, fecha: Date): Promise<string> {
   const { origen, destino } = await prepararRutas(respaldo);
   const prefijo = slug(respaldo.nombre);
-  let rutaCopia: string;
+  const nombreBase = respaldo.copiaConFecha ? `${prefijo}_${marcaTiempo(fecha)}` : prefijo;
 
-  if (respaldo.copiaConFecha) {
-    rutaCopia = path.join(destino, `${prefijo}_${marcaTiempo(fecha)}`);
+  if (origen.esCarpeta) {
+    let rutaCopia = path.join(destino, nombreBase);
 
-    if (await existeCarpeta(rutaCopia)) {
-      rutaCopia = `${rutaCopia}-${Date.now()}`;
+    if (respaldo.copiaConFecha) {
+      if (await existeCarpeta(rutaCopia)) {
+        rutaCopia = `${rutaCopia}-${Date.now()}`;
+      }
+    } else {
+      // Sin fecha: una única carpeta que se reemplaza en cada ejecución.
+      if (rutaCopia === origen.ruta) {
+        throw new Error('La carpeta de copia coincidiría con la carpeta de origen.');
+      }
+
+      await fs.rm(rutaCopia, { recursive: true, force: true });
     }
-  } else {
-    // Sin fecha: una única carpeta que se reemplaza en cada ejecución.
-    rutaCopia = path.join(destino, prefijo);
 
-    if (rutaCopia === origen) {
-      throw new Error('La carpeta de copia coincidiría con la carpeta de origen.');
-    }
+    await fs.cp(origen.ruta, rutaCopia, { recursive: true, force: true, errorOnExist: false });
 
-    await fs.rm(rutaCopia, { recursive: true, force: true });
+    return rutaCopia;
   }
 
-  await fs.cp(origen, rutaCopia, { recursive: true, force: true, errorOnExist: false });
+  // Archivo suelto: se conserva su extensión y se copia como un único archivo.
+  const extension = path.extname(origen.ruta);
+  let rutaCopia = path.join(destino, `${nombreBase}${extension}`);
+
+  if (respaldo.copiaConFecha) {
+    if (await existeRuta(rutaCopia)) {
+      rutaCopia = path.join(destino, `${nombreBase}-${Date.now()}${extension}`);
+    }
+  } else {
+    if (rutaCopia === origen.ruta) {
+      throw new Error('El archivo de copia coincidiría con el archivo de origen.');
+    }
+
+    await fs.rm(rutaCopia, { force: true });
+  }
+
+  await fs.copyFile(origen.ruta, rutaCopia);
 
   return rutaCopia;
 }
 
-function empaquetar(origen: string, rutaSalida: string): Promise<void> {
+function empaquetar(origen: OrigenRespaldo, rutaSalida: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const salida = createWriteStream(rutaSalida);
     const archivo = new ZipArchive({ zlib: { level: 6 } });
@@ -123,12 +142,18 @@ function empaquetar(origen: string, rutaSalida: string): Promise<void> {
     });
 
     archivo.pipe(salida);
-    archivo.directory(origen, false);
+
+    if (origen.esCarpeta) {
+      archivo.directory(origen.ruta, false);
+    } else {
+      archivo.file(origen.ruta, { name: path.basename(origen.ruta) });
+    }
+
     void archivo.finalize();
   });
 }
 
-async function comprimirCarpeta(respaldo: RespaldoConfigurado, fecha: Date): Promise<string> {
+async function comprimirOrigen(respaldo: RespaldoConfigurado, fecha: Date): Promise<string> {
   const { origen, destino } = await prepararRutas(respaldo);
   const prefijo = slug(respaldo.nombre);
   const nombreBase = respaldo.copiaConFecha ? `${prefijo}_${marcaTiempo(fecha)}` : prefijo;
@@ -161,11 +186,10 @@ async function aplicarRetencion(destino: string, prefijo: string, retencionDias:
   const entradas = await fs.readdir(destino, { withFileTypes: true });
 
   for (const entrada of entradas) {
+    // Aplica a carpetas, .zip y archivos sueltos creados con fecha.
     const esCopiaConFecha = entrada.name.startsWith(`${prefijo}_`);
-    const esCarpeta = entrada.isDirectory();
-    const esArchivoZip = entrada.isFile() && entrada.name.toLowerCase().endsWith('.zip');
 
-    if (!esCopiaConFecha || (!esCarpeta && !esArchivoZip)) {
+    if (!esCopiaConFecha || (!entrada.isDirectory() && !entrada.isFile())) {
       continue;
     }
 
@@ -204,15 +228,25 @@ async function ejecutarRespaldoInterno(respaldo: RespaldoConfigurado): Promise<v
   const proximaEjecucion = calcularSiguienteEjecucion(inicio, respaldo.frecuenciaMinutos);
 
   try {
-    const rutaCopia = respaldo.comprimir
-      ? await comprimirCarpeta(respaldo, inicio)
-      : await copiarCarpeta(respaldo, inicio);
-    const destino = path.resolve(respaldo.destino);
+    const rutaCopia =
+      respaldo.tipo === 'mssql'
+        ? await respaldarBasesDatosMssql(respaldo, inicio)
+        : respaldo.comprimir
+          ? await comprimirOrigen(respaldo, inicio)
+          : await copiarOrigen(respaldo, inicio);
 
-    try {
-      await aplicarRetencion(destino, slug(respaldo.nombre), respaldo.retencionDias);
-    } catch (error) {
-      logger.warn(`No se pudo limpiar el destino de "${respaldo.nombre}"`, error);
+    // La retención solo aplica a los archivos que copia la propia aplicación;
+    // los .bak viven en el servidor SQL y se administran allí.
+    if (respaldo.tipo === 'archivos') {
+      try {
+        await aplicarRetencion(
+          path.resolve(respaldo.destino),
+          slug(respaldo.nombre),
+          respaldo.retencionDias,
+        );
+      } catch (error) {
+        logger.warn(`No se pudo limpiar el destino de "${respaldo.nombre}"`, error);
+      }
     }
 
     registrarEjecucionRespaldo(

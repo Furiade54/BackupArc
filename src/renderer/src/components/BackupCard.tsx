@@ -1,4 +1,5 @@
 import type { RespaldoConfigurado } from '../../../shared/types/respaldo.types';
+import { formatearBasesDatos } from '../../../shared/utils/bases-datos';
 import {
   formatearAntiguedad,
   formatearFechaHora,
@@ -107,6 +108,8 @@ export function BackupCard({
   const frecuenciaVisible = frecuenciaTexto.charAt(0).toUpperCase() + frecuenciaTexto.slice(1);
   const limiteTexto = frecuenciaTexto.replace(/^cada /, '');
   const resumenAntiguedad = `Antigüedad: ${antiguedadTexto.replace(/^hace /, '')} de ${limiteTexto} (${porcentajeRedondeado}% · ${ETIQUETAS_BARRA[estadoBarra]})`;
+  const origenVisible =
+    respaldo.tipo === 'mssql' ? formatearBasesDatos(respaldo.origen) : respaldo.origen;
 
   return (
     <article
@@ -133,9 +136,9 @@ export function BackupCard({
           </h3>
           <p
             className="tarjeta-respaldo__base"
-            title={`Origen: ${respaldo.origen}\nDestino: ${respaldo.destino}`}
+            title={`Origen: ${origenVisible}\nDestino: ${respaldo.destino}`}
           >
-            {respaldo.origen}
+            {origenVisible}
           </p>
         </div>
 
@@ -185,6 +188,7 @@ export function BackupCard({
 
       <p className="tarjeta-respaldo__repeticion">
         {frecuenciaVisible}
+        {respaldo.tipo === 'mssql' && ' · MSSQL'}
         {respaldo.comprimir && ' · ZIP'}
         {!respaldo.habilitado && ' · Deshabilitada'}
         {ejecutando && (

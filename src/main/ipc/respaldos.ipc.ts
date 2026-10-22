@@ -5,6 +5,7 @@ import type {
   EjecucionRespaldo,
   NuevoRespaldo,
   RespaldoConfigurado,
+  TipoRespaldo,
 } from '../../shared/types/respaldo.types';
 import {
   actualizarRespaldo,
@@ -19,6 +20,8 @@ import { validarRemitente } from './remitente';
 
 const MAX_NOMBRE = 80;
 const MAX_RUTA = 500;
+const MAX_BASES_DATOS = 100;
+const MAX_NOMBRE_BASE = 128;
 const MAX_FRECUENCIA_MINUTOS = 43_200;
 const MAX_RETENCION_DIAS = 3650;
 
@@ -82,22 +85,73 @@ function validarBooleano(valor: unknown, campo: string): boolean {
   return valor;
 }
 
+function validarTipo(valor: unknown): TipoRespaldo {
+  if (valor !== 'archivos' && valor !== 'mssql') {
+    throw new Error('El tipo de copia debe ser "archivos" o "mssql".');
+  }
+
+  return valor;
+}
+
+// Las tareas MSSQL guardan en "origen" un arreglo JSON con las bases elegidas.
+function validarBasesDatos(valor: unknown): string {
+  if (typeof valor !== 'string' || valor.length === 0 || valor.length > 8000) {
+    throw new Error('La lista de bases de datos no es válida.');
+  }
+
+  let bases: unknown;
+
+  try {
+    bases = JSON.parse(valor);
+  } catch (error) {
+    throw new Error('La lista de bases de datos no es válida.', { cause: error });
+  }
+
+  if (!Array.isArray(bases) || bases.length === 0 || bases.length > MAX_BASES_DATOS) {
+    throw new Error(`Selecciona entre 1 y ${MAX_BASES_DATOS} bases de datos.`);
+  }
+
+  const nombres = bases.map((base) => {
+    if (typeof base !== 'string') {
+      throw new Error('La lista de bases de datos no es válida.');
+    }
+
+    const nombre = base.trim();
+
+    if (nombre.length === 0 || nombre.length > MAX_NOMBRE_BASE) {
+      throw new Error(
+        `Cada base de datos debe tener entre 1 y ${MAX_NOMBRE_BASE} caracteres.`,
+      );
+    }
+
+    return nombre;
+  });
+
+  return JSON.stringify(Array.from(new Set(nombres)));
+}
+
 function validarNuevoRespaldo(datos: unknown): NuevoRespaldo {
   if (typeof datos !== 'object' || datos === null) {
     throw new Error('Los datos de la copia no son válidos.');
   }
 
   const registro = datos as Record<string, unknown>;
+  const tipo = validarTipo(registro.tipo);
 
   return {
     nombre: validarTexto(registro.nombre, 'nombre', MAX_NOMBRE),
-    origen: validarTexto(registro.origen, 'origen', MAX_RUTA),
+    tipo,
+    origen:
+      tipo === 'mssql'
+        ? validarBasesDatos(registro.origen)
+        : validarTexto(registro.origen, 'origen', MAX_RUTA),
     destino: validarTexto(registro.destino, 'destino', MAX_RUTA),
     frecuenciaMinutos: validarFrecuencia(registro.frecuenciaMinutos),
     horaEjecucion: validarHora(registro.horaEjecucion),
     retencionDias: validarRetencion(registro.retencionDias),
     copiaConFecha: validarBooleano(registro.copiaConFecha, 'copiaConFecha'),
-    comprimir: validarBooleano(registro.comprimir, 'comprimir'),
+    // Un respaldo de base de datos ya se entrega como .bak en el servidor.
+    comprimir: tipo === 'mssql' ? false : validarBooleano(registro.comprimir, 'comprimir'),
   };
 }
 
