@@ -42,6 +42,7 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
   const [hora, setHora] = useState(respaldo?.horaEjecucion ?? '03:00');
   const [retencion, setRetencion] = useState(String(respaldo?.retencionDias ?? 7));
   const [copiaConFecha, setCopiaConFecha] = useState(respaldo?.copiaConFecha ?? true);
+  const [comprimir, setComprimir] = useState(respaldo?.comprimir ?? false);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -98,6 +99,7 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
         horaEjecucion: hora,
         retencionDias,
         copiaConFecha,
+        comprimir,
       };
 
       const resultado = respaldo
@@ -212,7 +214,25 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
         )}
 
         <div className="campo">
-          <label htmlFor="backup-carpeta">Carpeta de la copia</label>
+          <label htmlFor="backup-formato">Formato del destino</label>
+          <select
+            id="backup-formato"
+            value={comprimir ? 'zip' : 'carpeta'}
+            disabled={guardando}
+            onChange={(evento) => setComprimir(evento.target.value === 'zip')}
+          >
+            <option value="carpeta">Carpeta descomprimida</option>
+            <option value="zip">Archivo .zip</option>
+          </select>
+          <span className="campo__ayuda">
+            {comprimir
+              ? 'La copia llega al destino como un único archivo comprimido.'
+              : 'La copia llega al destino con las carpetas y archivos tal cual.'}
+          </span>
+        </div>
+
+        <div className="campo">
+          <label htmlFor="backup-carpeta">Nombre de la copia</label>
           <select
             id="backup-carpeta"
             value={copiaConFecha ? 'fecha' : 'unica'}
@@ -224,8 +244,10 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
           </select>
           <span className="campo__ayuda">
             {copiaConFecha
-              ? 'Cada ejecución crea una carpeta nueva y la retención borra las antiguas.'
-              : 'Siempre se guarda en la misma carpeta y se reemplaza en cada ejecución.'}
+              ? `Cada ejecución crea ${comprimir ? 'un .zip nuevo' : 'una carpeta nueva'} y la retención borra ${
+                  comprimir ? 'los antiguos' : 'las antiguas'
+                }.`
+              : `Siempre se guarda ${comprimir ? 'el mismo .zip' : 'en la misma carpeta'} y se reemplaza en cada ejecución.`}
           </span>
         </div>
 

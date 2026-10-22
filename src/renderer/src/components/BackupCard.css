@@ -1,13 +1,15 @@
 .tarjeta-respaldo {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-height: 224px;
-  padding: 16px;
-  border: 1px solid var(--borde);
+  gap: 8px;
+  min-height: 196px;
+  padding: 14px 16px;
+  border: 1px solid var(--borde-fuerte);
   border-radius: 14px;
-  background: linear-gradient(180deg, rgba(18, 29, 51, 0.92), rgba(14, 23, 41, 0.96));
-  box-shadow: 0 12px 30px rgba(2, 8, 20, 0.28);
+  background: linear-gradient(180deg, #1e2c47 0%, #17243b 100%);
+  box-shadow:
+    0 14px 32px rgba(2, 8, 20, 0.45),
+    inset 0 1px 0 rgba(200, 234, 251, 0.06);
   transition: border-color 0.15s ease, transform 0.15s ease;
 }
 
@@ -30,8 +32,7 @@
 
 .tarjeta-respaldo--deshabilitada .tarjeta-respaldo__nombre,
 .tarjeta-respaldo--deshabilitada .tarjeta-respaldo__base,
-.tarjeta-respaldo--deshabilitada .tarjeta-respaldo__fila strong,
-.tarjeta-respaldo--deshabilitada .tarjeta-respaldo__proxima {
+.tarjeta-respaldo--deshabilitada .tarjeta-respaldo__fila strong {
   color: var(--texto-suave);
 }
 
@@ -40,7 +41,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding-bottom: 10px;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--borde);
 }
 
@@ -51,7 +52,7 @@
 .tarjeta-respaldo__nombre {
   margin: 0;
   overflow: hidden;
-  font-size: 14.5px;
+  font-size: var(--texto-lg);
   font-weight: 600;
   letter-spacing: -0.01em;
   text-overflow: ellipsis;
@@ -62,7 +63,7 @@
   margin: 3px 0 0;
   overflow: hidden;
   color: var(--texto-suave);
-  font-size: 11.5px;
+  font-size: var(--texto-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -76,22 +77,12 @@
   background: #64748b;
 }
 
-.punto-estado--ok {
+.punto-estado--activa {
   background: var(--ok);
   box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.12);
 }
 
-.punto-estado--advertencia {
-  background: var(--aviso);
-  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.12);
-}
-
-.punto-estado--error {
-  background: var(--error);
-  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.12);
-}
-
-.punto-estado--pendiente {
+.punto-estado--inactiva {
   background: #64748b;
   box-shadow: 0 0 0 4px rgba(100, 116, 139, 0.12);
 }
@@ -120,12 +111,34 @@
   flex-wrap: wrap;
   gap: 12px;
   color: var(--texto-suave);
-  font-size: 12.5px;
+  font-size: var(--texto-sm);
 }
 
 .tarjeta-respaldo__fila strong {
   color: var(--texto);
   font-weight: 500;
+}
+
+.tarjeta-respaldo__medidor {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: -2px;
+}
+
+.tarjeta-respaldo__medidor-etiqueta {
+  color: var(--texto-suave);
+  font-size: var(--texto-xs);
+  letter-spacing: 0.01em;
+}
+
+.tarjeta-respaldo__porcentaje {
+  flex: none;
+  color: var(--texto-suave);
+  font-size: var(--texto-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .barra-ciclo {
@@ -193,7 +206,7 @@
 .tarjeta-respaldo__repeticion {
   margin: 0;
   color: var(--texto-suave);
-  font-size: 12px;
+  font-size: var(--texto-sm);
 }
 
 .indicador-ejecucion {
@@ -202,7 +215,7 @@
   gap: 6px;
   margin-left: 8px;
   color: var(--acento);
-  font-size: 11.5px;
+  font-size: var(--texto-xs);
   font-weight: 500;
 }
 
@@ -222,7 +235,7 @@
   background: transparent;
   color: var(--acento);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--texto-sm);
   cursor: pointer;
 }
 
@@ -243,20 +256,13 @@
   flex-wrap: wrap;
   gap: 12px;
   margin-top: auto;
-  padding-top: 2px;
-}
-
-.tarjeta-respaldo__proxima {
-  min-width: 0;
-  color: var(--texto-suave);
-  font-size: 12px;
-  line-height: 1.35;
+  padding-top: 6px;
 }
 
 .tarjeta-respaldo__acciones {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   flex: none;
 }
 
@@ -264,8 +270,8 @@
   display: grid;
   place-items: center;
   flex: none;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   border: 0;
   border-radius: 7px;

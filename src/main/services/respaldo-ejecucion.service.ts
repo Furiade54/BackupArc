@@ -1,12 +1,14 @@
-import { promises as fs } from 'node:fs';
+import { createWriteStream, promises as fs } from 'node:fs';
 import path from 'node:path';
+import { ZipArchive, type ArchiverError } from 'archiver';
 import { BrowserWindow } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels';
 import type { RespaldoConfigurado } from '../../shared/types/respaldo.types';
 import {
   actualizarEstadoRespaldo,
-  calcularProximaEjecucion,
+  calcularSiguienteEjecucion,
   listarRespaldosVencidos,
+  normalizarProximasEjecuciones,
   obtenerRespaldo,
   registrarEjecucionRespaldo,
 } from '../repositories/respaldos-local.repository';
@@ -48,7 +50,17 @@ async function existeCarpeta(ruta: string): Promise<boolean> {
   }
 }
 
-async function copiarCarpeta(respaldo: RespaldoConfigurado, fecha: Date): Promise<string> {
+async function existeRuta(ruta: string): Promise<boolean> {
+  try {
+    await fs.stat(ruta);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Valida origen/destino y devuelve ambas rutas absolutas.
+async function prepararRutas(respaldo: RespaldoConfigurado): Promise<{ origen: string; destino: string }> {
   const origen = path.resolve(respaldo.origen);
   const destino = path.resolve(respaldo.destino);
 
@@ -62,6 +74,11 @@ async function copiarCarpeta(respaldo: RespaldoConfigurado, fecha: Date): Promis
 
   await fs.mkdir(destino, { recursive: true });
 
+  return { origen, destino };
+}
+
+async function copiarCarpeta(respaldo: RespaldoConfigurado, fecha: Date): Promise<string> {
+  const { origen, destino } = await prepararRutas(respaldo);
   const prefijo = slug(respaldo.nombre);
   let rutaCopia: string;
 
@@ -87,12 +104,68 @@ async function copiarCarpeta(respaldo: RespaldoConfigurado, fecha: Date): Promis
   return rutaCopia;
 }
 
+function empaquetar(origen: string, rutaSalida: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const salida = createWriteStream(rutaSalida);
+    const archivo = new ZipArchive({ zlib: { level: 6 } });
+
+    salida.on('close', () => resolve());
+    salida.on('error', reject);
+    archivo.on('error', reject);
+    archivo.on('warning', (error: ArchiverError) => {
+      // Una entrada ilegible se advierte, pero no invalida el resto del paquete.
+      if (error.code === 'ENOENT') {
+        logger.warn('Entrada omitida al comprimir el respaldo', error);
+        return;
+      }
+
+      reject(error);
+    });
+
+    archivo.pipe(salida);
+    archivo.directory(origen, false);
+    void archivo.finalize();
+  });
+}
+
+async function comprimirCarpeta(respaldo: RespaldoConfigurado, fecha: Date): Promise<string> {
+  const { origen, destino } = await prepararRutas(respaldo);
+  const prefijo = slug(respaldo.nombre);
+  const nombreBase = respaldo.copiaConFecha ? `${prefijo}_${marcaTiempo(fecha)}` : prefijo;
+  let rutaZip = path.join(destino, `${nombreBase}.zip`);
+
+  if (respaldo.copiaConFecha) {
+    if (await existeRuta(rutaZip)) {
+      rutaZip = path.join(destino, `${nombreBase}-${Date.now()}.zip`);
+    }
+  } else {
+    await fs.rm(rutaZip, { force: true });
+  }
+
+  // Se escribe en un archivo temporal para no dejar un .zip incompleto si falla.
+  const rutaTemporal = `${rutaZip}.parcial`;
+
+  try {
+    await empaquetar(origen, rutaTemporal);
+    await fs.rename(rutaTemporal, rutaZip);
+  } catch (error) {
+    await fs.rm(rutaTemporal, { force: true });
+    throw error;
+  }
+
+  return rutaZip;
+}
+
 async function aplicarRetencion(destino: string, prefijo: string, retencionDias: number): Promise<void> {
   const limite = Date.now() - retencionDias * 24 * 60 * 60 * 1000;
   const entradas = await fs.readdir(destino, { withFileTypes: true });
 
   for (const entrada of entradas) {
-    if (!entrada.isDirectory() || !entrada.name.startsWith(`${prefijo}_`)) {
+    const esCopiaConFecha = entrada.name.startsWith(`${prefijo}_`);
+    const esCarpeta = entrada.isDirectory();
+    const esArchivoZip = entrada.isFile() && entrada.name.toLowerCase().endsWith('.zip');
+
+    if (!esCopiaConFecha || (!esCarpeta && !esArchivoZip)) {
       continue;
     }
 
@@ -128,14 +201,12 @@ async function ejecutarRespaldoInterno(respaldo: RespaldoConfigurado): Promise<v
   notificarCambioEjecucion(respaldo.id, true);
 
   const inicio = new Date();
-  const proximaEjecucion = calcularProximaEjecucion(
-    respaldo.horaEjecucion,
-    respaldo.frecuenciaMinutos,
-    inicio,
-  );
+  const proximaEjecucion = calcularSiguienteEjecucion(inicio, respaldo.frecuenciaMinutos);
 
   try {
-    const rutaCopia = await copiarCarpeta(respaldo, inicio);
+    const rutaCopia = respaldo.comprimir
+      ? await comprimirCarpeta(respaldo, inicio)
+      : await copiarCarpeta(respaldo, inicio);
     const destino = path.resolve(respaldo.destino);
 
     try {
@@ -211,6 +282,12 @@ async function comprobarRespaldosProgramados(): Promise<void> {
 export function iniciarProgramador(): void {
   if (temporizador) {
     return;
+  }
+
+  try {
+    normalizarProximasEjecuciones();
+  } catch (error) {
+    logger.warn('No se pudieron normalizar las próximas ejecuciones', error);
   }
 
   setTimeout(() => {

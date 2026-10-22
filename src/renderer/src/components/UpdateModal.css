@@ -10,7 +10,7 @@
 .actualizacion__estado {
   margin: 0;
   color: var(--texto-suave);
-  font-size: 13px;
+  font-size: var(--texto-md);
 }
 
 .actualizacion__notas {
@@ -22,7 +22,7 @@
   border-radius: 10px;
   background: color-mix(in srgb, var(--fondo-panel-suave) 65%, transparent);
   color: var(--texto-suave);
-  font-size: 12.5px;
+  font-size: var(--texto-sm);
   line-height: 1.55;
   white-space: pre-wrap;
 }

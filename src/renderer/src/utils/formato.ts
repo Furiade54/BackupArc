@@ -101,19 +101,3 @@ export function formatearAntiguedad(valor: string | null, ahora: number): string
   const dias = Math.floor(horas / 24);
   return dias === 1 ? 'hace 1 día' : `hace ${dias} días`;
 }
-
-export function calcularPorcentajeCiclo(
-  inicio: string,
-  fin: string,
-  ahora: number,
-): number {
-  const inicioMs = new Date(inicio).getTime();
-  const finMs = new Date(fin).getTime();
-
-  if (!Number.isFinite(inicioMs) || !Number.isFinite(finMs) || finMs <= inicioMs) {
-    return 0;
-  }
-
-  const porcentaje = ((ahora - inicioMs) / (finMs - inicioMs)) * 100;
-  return Math.min(100, Math.max(0, porcentaje));
-}

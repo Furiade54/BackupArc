@@ -1,6 +1,6 @@
 {
   "name": "backuparc",
-  "version": "2.2.3",
+  "version": "2.3.0",
   "private": true,
   "description": "BackupArc 2.0 - Gestión de respaldos de SQL Server",
   "author": "BackupArc",
@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.main.json && tsc --noEmit -p tsconfig.preload.json && tsc --noEmit -p tsconfig.renderer.json"
   },
   "dependencies": {
+    "archiver": "^8.0.0",
     "dotenv": "^18.0.8",
     "mssql": "^12.7.10",
     "react": "^19.3.1",
@@ -31,6 +32,7 @@
     "@electron-forge/plugin-vite": "^8.0.1",
     "@electron/fuses": "^2.1.3",
     "@eslint/js": "^10.0.1",
+    "@types/archiver": "^8.0.0",
     "@types/mssql": "^12.3.0",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",

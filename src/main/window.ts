@@ -48,7 +48,7 @@ export function crearVentanaPrincipal(): BrowserWindow {
     minWidth: 1024,
     minHeight: 680,
     show: false,
-    backgroundColor: '#070d19',
+    backgroundColor: '#0d1626',
     title: 'BackupArc 2.0',
     autoHideMenuBar: true,
     ...(app.isPackaged ? {} : { icon: path.join(__dirname, '../../assets/icons/png/256x256.png') }),

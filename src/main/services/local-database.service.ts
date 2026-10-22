@@ -136,6 +136,7 @@ export function inicializarBaseDatosLocal(): void {
       hora_ejecucion TEXT NOT NULL,
       retencion_dias INTEGER NOT NULL,
       copia_con_fecha INTEGER NOT NULL DEFAULT 1,
+      comprimir INTEGER NOT NULL DEFAULT 0,
       habilitado INTEGER NOT NULL DEFAULT 1,
       ultima_ejecucion TEXT,
       proxima_ejecucion TEXT NOT NULL,
@@ -170,6 +171,10 @@ export function inicializarBaseDatosLocal(): void {
 
   if (!columnasRespaldos.some((columna) => columna.name === 'copia_con_fecha')) {
     conexion.exec('ALTER TABLE respaldos ADD COLUMN copia_con_fecha INTEGER NOT NULL DEFAULT 1');
+  }
+
+  if (!columnasRespaldos.some((columna) => columna.name === 'comprimir')) {
+    conexion.exec('ALTER TABLE respaldos ADD COLUMN comprimir INTEGER NOT NULL DEFAULT 0');
   }
 
   if (columnasRespaldos.some((columna) => columna.name === 'frecuencia_horas')) {

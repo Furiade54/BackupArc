@@ -97,6 +97,7 @@ function validarNuevoRespaldo(datos: unknown): NuevoRespaldo {
     horaEjecucion: validarHora(registro.horaEjecucion),
     retencionDias: validarRetencion(registro.retencionDias),
     copiaConFecha: validarBooleano(registro.copiaConFecha, 'copiaConFecha'),
+    comprimir: validarBooleano(registro.comprimir, 'comprimir'),
   };
 }
 

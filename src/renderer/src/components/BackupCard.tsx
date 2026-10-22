@@ -1,9 +1,6 @@
 import type { RespaldoConfigurado } from '../../../shared/types/respaldo.types';
 import {
-  ETIQUETAS_ESTADO,
-  calcularPorcentajeCiclo,
   formatearAntiguedad,
-  formatearFecha,
   formatearFechaHora,
   formatearFrecuencia,
   formatearHora,
@@ -93,11 +90,23 @@ export function BackupCard({
   // 100 % cuando vence. Una ejecución fallida la deja llena en rojo.
   const vencio = ahora > new Date(respaldo.proximaEjecucion).getTime();
   const fallo = respaldo.ultimoEstado === 'error';
-  const porcentaje = vencio || fallo ? 100 : calcularPorcentajeCiclo(inicioCiclo, respaldo.proximaEjecucion, ahora);
+  // Se mide contra la frecuencia configurada, no contra la próxima ejecución
+  // guardada, para que "7 h de 24 h" siempre corresponda al porcentaje.
+  const duracionCicloMs = Math.max(respaldo.frecuenciaMinutos, 1) * 60_000;
+  const transcurridoMs = ahora - new Date(inicioCiclo).getTime();
+  const porcentaje =
+    vencio || fallo ? 100 : Math.min(100, Math.max(0, (transcurridoMs / duracionCicloMs) * 100));
   const porcentajeRedondeado = Math.round(porcentaje);
   const estadoBarra: EstadoBarra = !respaldo.habilitado
     ? 'deshabilitado'
     : estadoPorcentaje(porcentaje);
+  const antiguedadTexto = respaldo.ultimaEjecucion
+    ? formatearAntiguedad(respaldo.ultimaEjecucion, ahora)
+    : 'Sin ejecuciones';
+  const frecuenciaTexto = formatearFrecuencia(respaldo.frecuenciaMinutos);
+  const frecuenciaVisible = frecuenciaTexto.charAt(0).toUpperCase() + frecuenciaTexto.slice(1);
+  const limiteTexto = frecuenciaTexto.replace(/^cada /, '');
+  const resumenAntiguedad = `Antigüedad: ${antiguedadTexto.replace(/^hace /, '')} de ${limiteTexto} (${porcentajeRedondeado}% · ${ETIQUETAS_BARRA[estadoBarra]})`;
 
   return (
     <article
@@ -131,39 +140,35 @@ export function BackupCard({
         </div>
 
         <span
-          className={`punto-estado punto-estado--${respaldo.ultimoEstado}${
+          className={`punto-estado punto-estado--${respaldo.habilitado ? 'activa' : 'inactiva'}${
             ejecutando ? ' punto-estado--ejecutando' : ''
           }`}
-          title={ejecutando ? 'Ejecutando copia…' : ETIQUETAS_ESTADO[respaldo.ultimoEstado]}
-          aria-label={ejecutando ? 'Ejecutando copia' : `Estado: ${ETIQUETAS_ESTADO[respaldo.ultimoEstado]}`}
+          title={ejecutando ? 'Ejecutando copia…' : respaldo.habilitado ? 'Tarea activa' : 'Tarea inactiva'}
+          aria-label={ejecutando ? 'Ejecutando copia' : respaldo.habilitado ? 'Tarea activa' : 'Tarea inactiva'}
         />
       </header>
 
       <div className="tarjeta-respaldo__fila">
-        <span>Última ejecución</span>
+        <span>Último backup</span>
         <strong title={respaldo.ultimaEjecucion ? formatearFechaHora(respaldo.ultimaEjecucion) : undefined}>
-          {respaldo.ultimaEjecucion
-            ? `${formatearFecha(respaldo.ultimaEjecucion)} · ${formatearAntiguedad(respaldo.ultimaEjecucion, ahora)}`
-            : 'Sin ejecuciones'}
+          {respaldo.ultimaEjecucion ? antiguedadTexto : 'Sin ejecuciones'}
         </strong>
+      </div>
+
+      <div className="tarjeta-respaldo__medidor">
+        <span className="tarjeta-respaldo__medidor-etiqueta">Antigüedad del backup</span>
+        <span className="tarjeta-respaldo__porcentaje">{porcentajeRedondeado}%</span>
       </div>
 
       <div
         className={`barra-ciclo${ejecutando ? ' barra-ciclo--ejecutando' : ''}`}
         role="progressbar"
+        aria-label="Antigüedad del backup"
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={porcentajeRedondeado}
-        aria-valuetext={
-          ejecutando
-            ? 'Ejecutando copia'
-            : `${ETIQUETAS_BARRA[estadoBarra]}: ${porcentajeRedondeado}% de antigüedad`
-        }
-        title={
-          ejecutando
-            ? 'Ejecutando copia…'
-            : `${ETIQUETAS_BARRA[estadoBarra]} · ${porcentajeRedondeado}% de antigüedad`
-        }
+        aria-valuetext={resumenAntiguedad}
+        title={resumenAntiguedad}
       >
         <span
           className={`barra-ciclo__relleno barra-ciclo__relleno--${estadoBarra}`}
@@ -171,8 +176,16 @@ export function BackupCard({
         />
       </div>
 
+      <div className="tarjeta-respaldo__fila">
+        <span>Próximo backup</span>
+        <strong title={formatearFechaHora(respaldo.proximaEjecucion)}>
+          {formatearHora(respaldo.proximaEjecucion)}
+        </strong>
+      </div>
+
       <p className="tarjeta-respaldo__repeticion">
-        Repetición {formatearFrecuencia(respaldo.frecuenciaMinutos)}
+        {frecuenciaVisible}
+        {respaldo.comprimir && ' · ZIP'}
         {!respaldo.habilitado && ' · Deshabilitada'}
         {ejecutando && (
           <span className="indicador-ejecucion">
@@ -182,17 +195,10 @@ export function BackupCard({
         )}
       </p>
 
-      <button type="button" className="enlace-accion" onClick={() => alVerHistorial(respaldo)}>
-        Ver historial
-      </button>
-
       <div className="tarjeta-respaldo__pie">
-        <span
-          className="tarjeta-respaldo__proxima"
-          title={formatearFechaHora(respaldo.proximaEjecucion)}
-        >
-          Próxima ejecución: {formatearHora(respaldo.proximaEjecucion)}
-        </span>
+        <button type="button" className="enlace-accion" onClick={() => alVerHistorial(respaldo)}>
+          Ver historial
+        </button>
 
         <div className="tarjeta-respaldo__acciones">
           <button

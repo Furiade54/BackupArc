@@ -15,6 +15,7 @@ interface FilaRespaldo {
   hora_ejecucion: string;
   retencion_dias: number;
   copia_con_fecha: number;
+  comprimir: number;
   habilitado: number;
   ultima_ejecucion: string | null;
   proxima_ejecucion: string;
@@ -43,6 +44,7 @@ function mapearRespaldo(fila: FilaRespaldo): RespaldoConfigurado {
     horaEjecucion: fila.hora_ejecucion,
     retencionDias: fila.retencion_dias,
     copiaConFecha: fila.copia_con_fecha === 1,
+    comprimir: fila.comprimir === 1,
     habilitado: fila.habilitado === 1,
     ultimaEjecucion: fila.ultima_ejecucion,
     proximaEjecucion: fila.proxima_ejecucion,
@@ -52,6 +54,47 @@ function mapearRespaldo(fila: FilaRespaldo): RespaldoConfigurado {
 }
 
 const MINUTOS_POR_DIA = 1440;
+
+// Siguiente ejecución de un ciclo ya iniciado: intervalo exacto desde la
+// última ejecución, para que la antigüedad mostrada coincida con la frecuencia.
+export function calcularSiguienteEjecucion(desde: Date, frecuenciaMinutos: number): string {
+  return new Date(desde.getTime() + frecuenciaMinutos * 60 * 1000).toISOString();
+}
+
+// Corrige programaciones guardadas con cálculos anteriores que no respetaban
+// el intervalo configurado.
+export function normalizarProximasEjecuciones(): void {
+  const baseDatos = obtenerBaseDatosLocal();
+  const filas = baseDatos
+    .prepare(`
+      SELECT id, frecuencia_minutos, ultima_ejecucion, proxima_ejecucion
+      FROM respaldos
+      WHERE ultima_ejecucion IS NOT NULL
+    `)
+    .all() as unknown as {
+    id: number;
+    frecuencia_minutos: number;
+    ultima_ejecucion: string;
+    proxima_ejecucion: string;
+  }[];
+  const actualizar = baseDatos.prepare('UPDATE respaldos SET proxima_ejecucion = ? WHERE id = ?');
+
+  for (const fila of filas) {
+    const ultima = new Date(fila.ultima_ejecucion).getTime();
+    const actual = new Date(fila.proxima_ejecucion).getTime();
+
+    if (!Number.isFinite(ultima)) {
+      continue;
+    }
+
+    const siguiente = calcularSiguienteEjecucion(new Date(ultima), fila.frecuencia_minutos);
+    const diferencia = Math.abs(actual - new Date(siguiente).getTime());
+
+    if (Number.isFinite(diferencia) && diferencia > 60_000) {
+      actualizar.run(siguiente, fila.id);
+    }
+  }
+}
 
 export function calcularProximaEjecucion(
   horaEjecucion: string,
@@ -100,11 +143,12 @@ export function crearRespaldo(datos: NuevoRespaldo): RespaldoConfigurado {
         hora_ejecucion,
         retencion_dias,
         copia_con_fecha,
+        comprimir,
         ultima_ejecucion,
         proxima_ejecucion,
         ultimo_estado,
         creado_en
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, 'pendiente', ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'pendiente', ?)
     `)
     .run(
       datos.nombre,
@@ -114,6 +158,7 @@ export function crearRespaldo(datos: NuevoRespaldo): RespaldoConfigurado {
       datos.horaEjecucion,
       datos.retencionDias,
       datos.copiaConFecha ? 1 : 0,
+      datos.comprimir ? 1 : 0,
       proximaEjecucion,
       creadoEn.toISOString(),
     );
@@ -143,6 +188,7 @@ export function actualizarRespaldo(id: number, datos: NuevoRespaldo): RespaldoCo
           hora_ejecucion = ?,
           retencion_dias = ?,
           copia_con_fecha = ?,
+          comprimir = ?,
           proxima_ejecucion = ?
       WHERE id = ?
     `)
@@ -154,6 +200,7 @@ export function actualizarRespaldo(id: number, datos: NuevoRespaldo): RespaldoCo
       datos.horaEjecucion,
       datos.retencionDias,
       datos.copiaConFecha ? 1 : 0,
+      datos.comprimir ? 1 : 0,
       proximaEjecucion,
       id,
     );

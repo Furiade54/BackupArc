@@ -34,7 +34,7 @@
 .navegacion__version {
   margin: 0;
   color: #64748b;
-  font-size: 11px;
+  font-size: var(--texto-xs);
 }
 
 .navegacion__ajustes {
@@ -73,7 +73,7 @@
 .navegacion__titulo {
   margin: 0 8px 8px;
   color: var(--texto-suave);
-  font-size: 10.5px;
+  font-size: var(--texto-xs);
   font-weight: 600;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -98,7 +98,7 @@
   border-radius: 8px;
   background: transparent;
   color: var(--texto-suave);
-  font-size: 13px;
+  font-size: var(--texto-md);
   text-align: left;
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease;

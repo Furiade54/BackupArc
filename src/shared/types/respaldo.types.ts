@@ -9,6 +9,7 @@ export interface RespaldoConfigurado {
   horaEjecucion: string;
   retencionDias: number;
   copiaConFecha: boolean;
+  comprimir: boolean;
   habilitado: boolean;
   ultimaEjecucion: string | null;
   proximaEjecucion: string;
@@ -24,6 +25,7 @@ export interface NuevoRespaldo {
   horaEjecucion: string;
   retencionDias: number;
   copiaConFecha: boolean;
+  comprimir: boolean;
 }
 
 export interface EjecucionRespaldo {
