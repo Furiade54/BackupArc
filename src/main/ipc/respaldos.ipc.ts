@@ -4,6 +4,9 @@ import type { ResultadoIpc } from '../../shared/types/api.types';
 import type {
   ConexionMssql,
   EjecucionRespaldo,
+  FiltroInformeBak,
+  InformeBak,
+  InformeGlobalBak,
   InventarioBak,
   ModoRespaldoMssql,
   NuevoRespaldo,
@@ -20,7 +23,11 @@ import {
   obtenerRespaldo,
 } from '../repositories/respaldos-local.repository';
 import { ejecutarRespaldoAhora } from '../services/respaldo-ejecucion.service';
-import { inventariarArchivosBak } from '../services/respaldo-mssql.service';
+import {
+  consultarArchivosBak,
+  consultarInformeGlobalBak,
+  inventariarArchivosBak,
+} from '../services/respaldo-mssql.service';
 import { validarRemitente } from './remitente';
 
 const MAX_NOMBRE = 80;
@@ -29,6 +36,9 @@ const MAX_BASES_DATOS = 100;
 const MAX_NOMBRE_BASE = 128;
 const MAX_FRECUENCIA_MINUTOS = 43_200;
 const MAX_RETENCION_DIAS = 3650;
+const PATRON_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_DIAS_INFORME = 366;
+const MAX_TEXTO_INFORME = 200;
 
 function mensajeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -80,6 +90,56 @@ function validarRetencion(valor: unknown): number {
   }
 
   return valor;
+}
+
+function validarFechaInforme(valor: unknown, campo: string): string {
+  if (typeof valor !== 'string' || !PATRON_FECHA.test(valor)) {
+    throw new Error(`La fecha ${campo} debe tener el formato aaaa-MM-dd.`);
+  }
+
+  const fecha = new Date(`${valor}T00:00:00Z`);
+
+  // El ida y vuelta descarta fechas inexistentes, como 2026-02-30.
+  if (Number.isNaN(fecha.getTime()) || fecha.toISOString().slice(0, 10) !== valor) {
+    throw new Error(`La fecha ${campo} no existe en el calendario.`);
+  }
+
+  return valor;
+}
+
+function validarFiltroInforme(valor: unknown): FiltroInformeBak {
+  if (typeof valor !== 'object' || valor === null) {
+    throw new Error('El filtro del informe no es válido.');
+  }
+
+  const registro = valor as Record<string, unknown>;
+  const desde = validarFechaInforme(registro.desde, 'inicial');
+  const hasta = validarFechaInforme(registro.hasta, 'final');
+
+  if (desde > hasta) {
+    throw new Error('La fecha inicial no puede ser posterior a la fecha final.');
+  }
+
+  const dias =
+    Math.floor(
+      (Date.parse(`${hasta}T00:00:00Z`) - Date.parse(`${desde}T00:00:00Z`)) / 86_400_000,
+    ) + 1;
+
+  if (dias > MAX_DIAS_INFORME) {
+    throw new Error(`El rango del informe no puede superar ${MAX_DIAS_INFORME} días.`);
+  }
+
+  const baseDatos =
+    registro.baseDatos == null || registro.baseDatos === ''
+      ? null
+      : validarTexto(registro.baseDatos, 'base de datos', MAX_NOMBRE_BASE);
+
+  const texto =
+    registro.texto == null || registro.texto === ''
+      ? null
+      : validarTexto(registro.texto, 'texto a buscar', MAX_TEXTO_INFORME);
+
+  return { desde, hasta, baseDatos, texto };
 }
 
 function validarBooleano(valor: unknown, campo: string): boolean {
@@ -350,6 +410,40 @@ export function registrarIpcRespaldos(): void {
         }
 
         return { ok: true, datos: await inventariarArchivosBak(respaldo) };
+      } catch (error) {
+        return { ok: false, error: mensajeError(error) };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.RESPALDOS_INFORME_BAK,
+    async (evento, id: unknown, filtro: unknown): Promise<ResultadoIpc<InformeBak>> => {
+      try {
+        validarRemitente(evento);
+        const respaldo = obtenerRespaldo(validarId(id));
+
+        if (!respaldo) {
+          throw new Error('La copia indicada no existe.');
+        }
+
+        if (respaldo.tipo !== 'mssql') {
+          throw new Error('El informe de .bak solo aplica a tareas MSSQL.');
+        }
+
+        return { ok: true, datos: await consultarArchivosBak(respaldo, validarFiltroInforme(filtro)) };
+      } catch (error) {
+        return { ok: false, error: mensajeError(error) };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.RESPALDOS_INFORME_GLOBAL,
+    async (evento, filtro: unknown): Promise<ResultadoIpc<InformeGlobalBak>> => {
+      try {
+        validarRemitente(evento);
+        return { ok: true, datos: await consultarInformeGlobalBak(validarFiltroInforme(filtro)) };
       } catch (error) {
         return { ok: false, error: mensajeError(error) };
       }

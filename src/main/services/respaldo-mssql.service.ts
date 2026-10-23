@@ -2,16 +2,27 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import sql from 'mssql';
 import type {
+  ArchivoBakInforme,
+  ArchivoBakInformeGlobal,
   ArchivoBakInventario,
   CompresionBak,
   ConexionMssql,
+  FiltroInformeBak,
+  InformeBak,
+  InformeGlobalBak,
   InventarioBak,
   NuevoResultadoBaseRespaldo,
   RespaldoConfigurado,
+  ResumenArchivosInforme,
+  TareaInformeGlobal,
   TipoEjecutadoMssql,
 } from '../../shared/types/respaldo.types';
 import { parsearBasesDatos } from '../../shared/utils/bases-datos';
-import { obtenerConexionMssqlRespaldo } from '../repositories/respaldos-local.repository';
+import {
+  listarRespaldos,
+  obtenerConexionMssqlRespaldo,
+  consultarEjecucionesArchivos,
+} from '../repositories/respaldos-local.repository';
 import { logger } from '../utils/logger';
 import { marcaTiempo } from '../utils/nombres-respaldo';
 import {
@@ -892,7 +903,7 @@ interface FilaInventario {
   uuid: string | null;
   base_guid: string | null;
   familias: number;
-  copia: number;
+  copia: number | boolean;
   archivo: string;
 }
 
@@ -997,7 +1008,13 @@ export async function inventariarArchivosBak(
           bs.backup_size AS tamano,
           CONVERT(varchar(36), bs.backup_set_uuid) AS uuid,
           CONVERT(varchar(36), bs.differential_base_guid) AS base_guid,
-          bs.family_count AS familias,
+          -- Se cuenta desde mediafamily en vez de usar bs.family_count:
+          -- esa columna no existe en todas las versiones de msdb.
+          (
+            SELECT COUNT(*)
+            FROM msdb.dbo.backupmediafamily m2
+            WHERE m2.media_set_id = bs.media_set_id
+          ) AS familias,
           bs.is_copy_only AS copia,
           mf.physical_device_name AS archivo
         FROM msdb.dbo.backupset bs
@@ -1078,7 +1095,7 @@ export async function inventariarArchivosBak(
       const baseGuid = fila.base_guid?.toLowerCase() ?? null;
       const baseFila = tipo === 'diferencial' && baseGuid ? bases.get(baseGuid) : null;
       const hijos = fila.uuid ? (hijosPorBase.get(fila.uuid.toLowerCase()) ?? 0) : 0;
-      const esCopyOnly = fila.copia === 1;
+      const esCopyOnly = fila.copia === 1 || fila.copia === true;
 
       let categoria: ArchivoBakInventario['categoria'];
       let sugerencia: string;
@@ -1130,4 +1147,260 @@ export async function inventariarArchivosBak(
   } finally {
     await pool.close().catch(() => undefined);
   }
+}
+
+const MAX_INFORME = 500;
+
+interface FilaInforme {
+  id: number;
+  base_datos: string;
+  tipo: string;
+  dia: string;
+  fecha: string;
+  tamano: number | string | null;
+  copia: number | boolean;
+  archivo: string;
+  familias: number;
+}
+
+// Recorre el rango con fechas UTC para no depender del huso del equipo.
+function diasDelRango(desde: string, hasta: string): string[] {
+  const dias: string[] = [];
+  const inicio = Date.parse(`${desde}T00:00:00Z`);
+  const fin = Date.parse(`${hasta}T00:00:00Z`);
+
+  if (Number.isNaN(inicio) || Number.isNaN(fin) || fin < inicio) {
+    return dias;
+  }
+
+  for (let actual = inicio; actual <= fin; actual += 86_400_000) {
+    dias.push(new Date(actual).toISOString().slice(0, 10));
+  }
+
+  return dias;
+}
+
+// Informe de solo lectura: busca en msdb los .bak de la carpeta dentro del
+// rango pedido. El rango se resuelve con el calendario del servidor SQL.
+export async function consultarArchivosBak(
+  respaldo: RespaldoConfigurado,
+  filtro: FiltroInformeBak,
+): Promise<InformeBak> {
+  const carpeta = respaldo.destino.trim();
+
+  if (!carpeta) {
+    throw new Error('La tarea no tiene una carpeta destino.');
+  }
+
+  const conexion = obtenerConexionMssqlRespaldo(respaldo.id) ?? leerConfiguracionMssql();
+
+  if (!estaConfiguracionCompleta(conexion)) {
+    throw new Error('Esta tarea no tiene las credenciales de SQL Server configuradas.');
+  }
+
+  const pool = new sql.ConnectionPool(configuracionSqlPara(conexion));
+
+  try {
+    await pool.connect();
+
+    const separador = carpeta.endsWith('\\') ? '' : '\\';
+    const patron = `${escaparLike(`${carpeta}${separador}`)}%`;
+    const patronTexto = filtro.texto ? `%${escaparLike(filtro.texto)}%` : null;
+
+    const resultado = await pool
+      .request()
+      .input('patron', sql.NVarChar(4000), patron)
+      .input('desde', sql.NVarChar(10), filtro.desde)
+      .input('hasta', sql.NVarChar(10), filtro.hasta)
+      .input('base', sql.NVarChar(128), filtro.baseDatos)
+      .input('texto', sql.NVarChar(4000), patronTexto)
+      .query<FilaInforme>(`
+        SELECT TOP ${MAX_INFORME + 1}
+          bs.backup_set_id AS id,
+          bs.database_name AS base_datos,
+          bs.type AS tipo,
+          CONVERT(char(10), bs.backup_finish_date, 23) AS dia,
+          CONVERT(varchar(33), bs.backup_finish_date, 126) AS fecha,
+          bs.backup_size AS tamano,
+          bs.is_copy_only AS copia,
+          mf.physical_device_name AS archivo,
+          -- Conteo desde mediafamily: bs.family_count no existe en todas las versiones.
+          (
+            SELECT COUNT(*)
+            FROM msdb.dbo.backupmediafamily m2
+            WHERE m2.media_set_id = bs.media_set_id
+          ) AS familias
+        FROM msdb.dbo.backupset bs
+        JOIN msdb.dbo.backupmediafamily mf ON mf.media_set_id = bs.media_set_id
+        WHERE bs.type IN ('D', 'I')
+          -- Estilo 23 (aaaa-MM-dd): el rango no depende del idioma del servidor.
+          AND bs.backup_finish_date >= CONVERT(date, @desde, 23)
+          AND bs.backup_finish_date < DATEADD(day, 1, CONVERT(date, @hasta, 23))
+          AND mf.physical_device_name LIKE @patron ESCAPE '\\'
+          AND (@base IS NULL OR bs.database_name = @base)
+          AND (@texto IS NULL OR mf.physical_device_name LIKE @texto ESCAPE '\\')
+        ORDER BY bs.backup_finish_date DESC, bs.backup_set_id DESC
+      `);
+
+    // Un backup repartido en varios archivos aparece una vez por familia:
+    // se conserva la primera fila para contar el backup set una sola vez.
+    const unicos = new Map<number, FilaInforme>();
+
+    for (const fila of resultado.recordset) {
+      if (!unicos.has(fila.id)) {
+        unicos.set(fila.id, fila);
+      }
+    }
+
+    const truncado = unicos.size > MAX_INFORME;
+    const filas = [...unicos.values()].slice(0, MAX_INFORME);
+
+    const archivos: ArchivoBakInforme[] = filas.map((fila) => ({
+      archivo: fila.archivo,
+      nombre: nombreDeRuta(fila.archivo),
+      baseDatos: fila.base_datos,
+      tipo: fila.tipo === 'I' ? 'diferencial' : 'completo',
+      dia: fila.dia,
+      fecha: fila.fecha,
+      // backup_size llega como texto desde el driver en algunas versiones.
+      tamanoBytes: fila.tamano === null ? null : Number(fila.tamano),
+      esCopyOnly: fila.copia === 1 || fila.copia === true,
+      familias: fila.familias ?? 1,
+    }));
+
+    const diasConRespaldo = [...new Set(archivos.map((archivo) => archivo.dia))].sort();
+    const conRespaldo = new Set(diasConRespaldo);
+    const diasSinRespaldo = diasDelRango(filtro.desde, filtro.hasta).filter(
+      (dia) => !conRespaldo.has(dia),
+    );
+
+    return {
+      carpeta,
+      desde: filtro.desde,
+      hasta: filtro.hasta,
+      archivos,
+      resumen: {
+        total: archivos.length,
+        completos: archivos.filter((archivo) => archivo.tipo === 'completo').length,
+        diferenciales: archivos.filter((archivo) => archivo.tipo === 'diferencial').length,
+        bases: [...new Set(archivos.map((archivo) => archivo.baseDatos))].sort(),
+        tamanoTotalBytes: archivos.reduce(
+          (total, archivo) => total + (archivo.tamanoBytes ?? 0),
+          0,
+        ),
+        diasConRespaldo,
+        diasSinRespaldo,
+      },
+      truncado,
+      advertencia:
+        'Datos tomados de msdb. Solo aparecen los backups registrados en el servidor; un archivo copiado por fuera de SQL Server no se refleja aquí.',
+    };
+  } finally {
+    await pool.close().catch(() => undefined);
+  }
+}
+
+// Informe global: recorre todas las tareas MSSQL y une sus resultados.
+// Una tarea que falla no invalida el informe de las demás.
+export async function consultarInformeGlobalBak(
+  filtro: FiltroInformeBak,
+): Promise<InformeGlobalBak> {
+  const tareas = listarRespaldos().filter((tarea) => tarea.tipo === 'mssql');
+  const archivos: ArchivoBakInformeGlobal[] = [];
+  const resumenTareas: TareaInformeGlobal[] = [];
+  let truncado = false;
+
+  for (const tarea of tareas) {
+    const servidor = tarea.conexionMssql
+      ? `${tarea.conexionMssql.servidor}:${tarea.conexionMssql.puerto}`
+      : 'Sin servidor configurado';
+
+    try {
+      const informe = await consultarArchivosBak(tarea, filtro);
+
+      archivos.push(
+        ...informe.archivos.map((archivo) => ({
+          ...archivo,
+          tareaId: tarea.id,
+          tarea: tarea.nombre,
+          servidor,
+        })),
+      );
+      resumenTareas.push({
+        id: tarea.id,
+        nombre: tarea.nombre,
+        servidor,
+        total: informe.resumen.total,
+        error: null,
+      });
+      truncado = truncado || informe.truncado;
+    } catch (error) {
+      const mensaje = error instanceof Error ? error.message : String(error);
+
+      logger.warn(`No se pudo generar el informe de "${tarea.nombre}"`, error);
+      resumenTareas.push({
+        id: tarea.id,
+        nombre: tarea.nombre,
+        servidor,
+        total: 0,
+        error: mensaje,
+      });
+    }
+  }
+
+  // Más recientes primero; las fechas del servidor son comparables como texto.
+  archivos.sort((a, b) => {
+    if (a.fecha === b.fecha) {
+      return 0;
+    }
+
+    return a.fecha < b.fecha ? 1 : -1;
+  });
+
+  const diasConRespaldo = [...new Set(archivos.map((archivo) => archivo.dia))].sort();
+  const conRespaldo = new Set(diasConRespaldo);
+
+  // Las tareas de archivos solo tienen sentido cuando el filtro es por fecha:
+  // una base o un nombre de .bak implica una consulta exclusiva de MSSQL.
+  const incluirArchivos = !filtro.baseDatos && !filtro.texto;
+  const consultaArchivos = incluirArchivos
+    ? consultarEjecucionesArchivos(filtro.desde, filtro.hasta)
+    : null;
+  let resumenArchivos: ResumenArchivosInforme | null = null;
+
+  if (consultaArchivos) {
+    const conEjecucion = new Set(consultaArchivos.resumen.diasConEjecucion);
+
+    resumenArchivos = {
+      ...consultaArchivos.resumen,
+      diasSinEjecucion: diasDelRango(filtro.desde, filtro.hasta).filter(
+        (dia) => !conEjecucion.has(dia),
+      ),
+      truncado: consultaArchivos.truncado,
+    };
+  }
+
+  return {
+    desde: filtro.desde,
+    hasta: filtro.hasta,
+    archivos,
+    resumen: {
+      total: archivos.length,
+      completos: archivos.filter((archivo) => archivo.tipo === 'completo').length,
+      diferenciales: archivos.filter((archivo) => archivo.tipo === 'diferencial').length,
+      bases: [...new Set(archivos.map((archivo) => archivo.baseDatos))].sort(),
+      tamanoTotalBytes: archivos.reduce(
+        (total, archivo) => total + (archivo.tamanoBytes ?? 0),
+        0,
+      ),
+      diasConRespaldo,
+      diasSinRespaldo: diasDelRango(filtro.desde, filtro.hasta).filter(
+        (dia) => !conRespaldo.has(dia),
+      ),
+    },
+    tareas: resumenTareas,
+    truncado,
+    ejecucionesArchivos: consultaArchivos?.ejecuciones ?? [],
+    resumenArchivos,
+  };
 }

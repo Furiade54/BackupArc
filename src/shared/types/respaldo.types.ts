@@ -121,6 +121,113 @@ export interface InventarioBak {
   advertencia: string;
 }
 
+/** Filtros del informe de .bak. Las fechas se interpretan en el servidor SQL. */
+export interface FiltroInformeBak {
+  /** Fecha inicial incluida, en formato aaaa-MM-dd. */
+  desde: string;
+  /** Fecha final incluida, en formato aaaa-MM-dd. */
+  hasta: string;
+  /** Base concreta; null para todas las de la carpeta destino. */
+  baseDatos: string | null;
+  /** Texto a buscar dentro de la ruta del archivo; null para no filtrar. */
+  texto: string | null;
+}
+
+/** Un .bak encontrado en msdb dentro del rango consultado. */
+export interface ArchivoBakInforme {
+  archivo: string;
+  nombre: string;
+  baseDatos: string;
+  tipo: TipoEjecutadoMssql;
+  /** Día del servidor en formato aaaa-MM-dd, sin conversión de zona horaria. */
+  dia: string;
+  fecha: string;
+  tamanoBytes: number | null;
+  esCopyOnly: boolean;
+  /** Cantidad de archivos físicos que componen este backup set. */
+  familias: number;
+}
+
+export interface ResumenInformeBak {
+  /** Cantidad de backup sets, no de archivos. */
+  total: number;
+  completos: number;
+  diferenciales: number;
+  bases: string[];
+  tamanoTotalBytes: number;
+  /** Días del rango con al menos un backup registrado. */
+  diasConRespaldo: string[];
+  /** Días del rango sin ningún backup registrado. */
+  diasSinRespaldo: string[];
+}
+
+export interface InformeBak {
+  carpeta: string;
+  desde: string;
+  hasta: string;
+  archivos: ArchivoBakInforme[];
+  resumen: ResumenInformeBak;
+  /** true cuando la lista se cortó por el límite de resultados. */
+  truncado: boolean;
+  advertencia: string;
+}
+
+/** Archivo del informe global: añade la tarea y el servidor de origen. */
+export interface ArchivoBakInformeGlobal extends ArchivoBakInforme {
+  tareaId: number;
+  tarea: string;
+  servidor: string;
+}
+
+/** Resultado del informe para cada tarea MSSQL consultada. */
+export interface TareaInformeGlobal {
+  id: number;
+  nombre: string;
+  servidor: string;
+  total: number;
+  /** Motivo cuando esa tarea no se pudo consultar. */
+  error: string | null;
+}
+
+export interface InformeGlobalBak {
+  desde: string;
+  hasta: string;
+  archivos: ArchivoBakInformeGlobal[];
+  resumen: ResumenInformeBak;
+  tareas: TareaInformeGlobal[];
+  /** true si alguna tarea superó su propio límite de resultados. */
+  truncado: boolean;
+  /** Sección de tareas de archivos y carpetas. */
+  ejecucionesArchivos: EjecucionArchivoInforme[];
+  /** null cuando el filtro apunta a una base o a un archivo .bak. */
+  resumenArchivos: ResumenArchivosInforme | null;
+}
+
+/** Ejecución de una tarea de archivos o carpetas dentro del informe global. */
+export interface EjecucionArchivoInforme {
+  id: number;
+  respaldoId: number;
+  tarea: string;
+  origen: string;
+  destino: string;
+  fecha: string;
+  /** Día local en formato aaaa-MM-dd. */
+  dia: string;
+  estado: EstadoRespaldo;
+  detalle: string | null;
+}
+
+export interface ResumenArchivosInforme {
+  total: number;
+  correctas: number;
+  fallidas: number;
+  tareas: number;
+  diasConEjecucion: string[];
+  diasSinEjecucion: string[];
+  /** true si la lista visible se cortó por el límite. */
+  truncado: boolean;
+}
+
 export interface EjecucionRespaldo {
   id: number;
   fecha: string;

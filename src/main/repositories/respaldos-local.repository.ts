@@ -1,6 +1,7 @@
 import type {
   CompresionBak,
   ConexionMssql,
+  EjecucionArchivoInforme,
   EjecucionRespaldo,
   EstadoRespaldo,
   ModoRespaldoMssql,
@@ -568,4 +569,120 @@ export function listarHistorialRespaldo(id: number): EjecucionRespaldo[] {
     runId: fila.run_id,
     resultados: resultadosPorEjecucion.get(fila.id) ?? [],
   }));
+}
+
+const MAX_EJECUCIONES_ARCHIVOS = 200;
+
+interface FilaConteoArchivos {
+  total: number;
+  correctas: number;
+  fallidas: number;
+  tareas: number;
+}
+
+interface FilaEjecucionArchivo {
+  id: number;
+  respaldo_id: number;
+  tarea: string;
+  origen: string;
+  destino: string;
+  fecha: string;
+  estado: string;
+  detalle: string | null;
+}
+
+export interface EjecucionesArchivosConsultadas {
+  ejecuciones: EjecucionArchivoInforme[];
+  resumen: {
+    total: number;
+    correctas: number;
+    fallidas: number;
+    tareas: number;
+    diasConEjecucion: string[];
+  };
+  truncado: boolean;
+}
+
+function diaLocal(fecha: string): string {
+  const valor = new Date(fecha);
+
+  if (Number.isNaN(valor.getTime())) {
+    return fecha.slice(0, 10);
+  }
+
+  const dia = String(valor.getDate()).padStart(2, '0');
+  const mes = String(valor.getMonth() + 1).padStart(2, '0');
+
+  return `${valor.getFullYear()}-${mes}-${dia}`;
+}
+
+// Ejecuciones de tareas de archivos dentro del rango, del más reciente al más
+// antiguo. El conteo se hace en SQL para que no dependa del límite de la lista.
+export function consultarEjecucionesArchivos(
+  desde: string,
+  hasta: string,
+): EjecucionesArchivosConsultadas {
+  const baseDatos = obtenerBaseDatosLocal();
+  // Las fechas del informe son locales; el historial guarda ISO en UTC.
+  const desdeIso = new Date(`${desde}T00:00:00`).toISOString();
+  const hastaIso = new Date(`${hasta}T23:59:59.999`).toISOString();
+
+  const conteo = baseDatos
+    .prepare(`
+      SELECT COUNT(*) AS total,
+             COALESCE(SUM(CASE WHEN e.estado = 'ok' THEN 1 ELSE 0 END), 0) AS correctas,
+             COALESCE(SUM(CASE WHEN e.estado = 'error' THEN 1 ELSE 0 END), 0) AS fallidas,
+             COUNT(DISTINCT e.respaldo_id) AS tareas
+      FROM ejecuciones_respaldo e
+      JOIN respaldos r ON r.id = e.respaldo_id
+      WHERE r.tipo = 'archivos' AND e.fecha >= ? AND e.fecha <= ?
+    `)
+    .get(desdeIso, hastaIso) as unknown as FilaConteoArchivos;
+
+  const dias = baseDatos
+    .prepare(`
+      SELECT DISTINCT
+             COALESCE(date(e.fecha, 'localtime'), substr(e.fecha, 1, 10)) AS dia
+      FROM ejecuciones_respaldo e
+      JOIN respaldos r ON r.id = e.respaldo_id
+      WHERE r.tipo = 'archivos' AND e.fecha >= ? AND e.fecha <= ?
+      ORDER BY dia
+    `)
+    .all(desdeIso, hastaIso) as unknown as { dia: string }[];
+
+  const filas = baseDatos
+    .prepare(`
+      SELECT e.id, e.respaldo_id, r.nombre AS tarea, r.origen, r.destino,
+             e.fecha, e.estado, e.detalle
+      FROM ejecuciones_respaldo e
+      JOIN respaldos r ON r.id = e.respaldo_id
+      WHERE r.tipo = 'archivos' AND e.fecha >= ? AND e.fecha <= ?
+      ORDER BY e.fecha DESC
+      LIMIT ?
+    `)
+    .all(desdeIso, hastaIso, MAX_EJECUCIONES_ARCHIVOS) as unknown as FilaEjecucionArchivo[];
+
+  const total = conteo?.total ?? 0;
+
+  return {
+    ejecuciones: filas.map((fila) => ({
+      id: fila.id,
+      respaldoId: fila.respaldo_id,
+      tarea: fila.tarea,
+      origen: fila.origen,
+      destino: fila.destino,
+      fecha: fila.fecha,
+      dia: diaLocal(fila.fecha),
+      estado: esEstadoRespaldo(fila.estado) ? fila.estado : 'pendiente',
+      detalle: fila.detalle,
+    })),
+    resumen: {
+      total,
+      correctas: conteo?.correctas ?? 0,
+      fallidas: conteo?.fallidas ?? 0,
+      tareas: conteo?.tareas ?? 0,
+      diasConEjecucion: dias.map((fila) => fila.dia),
+    },
+    truncado: total > filas.length,
+  };
 }

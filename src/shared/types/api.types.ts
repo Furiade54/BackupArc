@@ -2,6 +2,9 @@ import type { ArchivoRespaldo } from './archivo.types';
 import type {
   ConexionMssql,
   EjecucionRespaldo,
+  FiltroInformeBak,
+  InformeBak,
+  InformeGlobalBak,
   InventarioBak,
   NuevoRespaldo,
   RespaldoConfigurado,
@@ -136,6 +139,8 @@ export interface ApiElectron {
     establecerActivo: (id: number, habilitado: boolean) => Promise<ResultadoIpc<void>>;
     historial: (id: number) => Promise<ResultadoIpc<EjecucionRespaldo[]>>;
     inventarioBak: (id: number) => Promise<ResultadoIpc<InventarioBak>>;
+    informeBak: (id: number, filtro: FiltroInformeBak) => Promise<ResultadoIpc<InformeBak>>;
+    informeGlobal: (filtro: FiltroInformeBak) => Promise<ResultadoIpc<InformeGlobalBak>>;
   };
   archivos: {
     listar: (limite?: number) => Promise<ResultadoIpc<ArchivoRespaldo[]>>;

@@ -9,15 +9,16 @@ import { ContextMenu, type OpcionMenu } from './components/ContextMenu';
 import { HistoryModal } from './components/HistoryModal';
 import { Modal } from './components/Modal';
 import { NewBackupModal } from './components/NewBackupModal';
+import { ReportsSection } from './components/ReportsSection';
 import { Sidebar } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
 import { UpdateModal } from './components/UpdateModal';
 
 const TITULOS_SECCION: Record<string, string> = {
   'seccion-copias': 'Copias de seguridad',
+  'seccion-informes': 'Informes',
 };
 
-const SECCIONES = ['seccion-copias'] as const;
 const CLAVE_MENU = 'ui.menu-lateral';
 
 function App() {
@@ -174,37 +175,10 @@ function App() {
     };
   }, [menuAbierto]);
 
+  // Cada sección es una página: al cambiar de vista se vuelve al inicio.
   useEffect(() => {
-    const raiz = contenedorRef.current;
-
-    if (!raiz) {
-      return;
-    }
-
-    const secciones = SECCIONES.map((id) => document.getElementById(id)).filter(
-      (elemento): elemento is HTMLElement => elemento !== null,
-    );
-
-    const observador = new IntersectionObserver(
-      (entradas) => {
-        const visibles = entradas
-          .filter((entrada) => entrada.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
-        const primera = visibles[0];
-
-        if (primera) {
-          setSeccionActiva(primera.target.id);
-        }
-      },
-      { root: raiz, rootMargin: '-10% 0px -55% 0px', threshold: [0, 0.25, 0.5, 1] },
-    );
-
-    secciones.forEach((seccion) => observador.observe(seccion));
-
-    return () => {
-      observador.disconnect();
-    };
-  }, []);
+    contenedorRef.current?.scrollTo({ top: 0 });
+  }, [seccionActiva]);
 
   const alternarMenu = useCallback(() => {
     setMenuAbierto((abierto) => !abierto);
@@ -212,15 +186,6 @@ function App() {
 
   const navegarASeccion = useCallback((id: string) => {
     setSeccionActiva(id);
-
-    const destino = document.getElementById(id);
-
-    if (!destino) {
-      return;
-    }
-
-    const movimientoReducido = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    destino.scrollIntoView({ behavior: movimientoReducido ? 'auto' : 'smooth', block: 'start' });
   }, []);
 
   const abrirNuevaCopia = useCallback(() => {
@@ -376,69 +341,75 @@ function App() {
         />
 
         <div className="app" ref={contenedorRef}>
-          <h1 className="solo-lectores">Copias de seguridad</h1>
+          <h1 className="solo-lectores">{TITULOS_SECCION[seccionActiva] ?? 'Copias de seguridad'}</h1>
 
-          <section className="seccion" id="seccion-copias">
-            <div className="seccion__encabezado">
-              <div>
-                <h2>Copias configuradas</h2>
-                <p>
-                  {respaldos.length === 0
-                    ? 'Aún no hay tareas de respaldo.'
-                    : `${respaldos.length} ${respaldos.length === 1 ? 'tarea configurada' : 'tareas configuradas'}`}
-                </p>
-              </div>
-            </div>
-
-            {mensajeRespaldos && (
-              <p className="mensaje-error" role="alert">
-                {mensajeRespaldos}
-              </p>
-            )}
-
-            {respaldos.length > 0 ? (
-              <div className="copias-grid">
-                {respaldos.map((respaldo) => (
-                  <BackupCard
-                    key={respaldo.id}
-                    respaldo={respaldo}
-                    ahora={ahora}
-                    ejecutando={ejecucionesActivas.has(respaldo.id)}
-                    alVerHistorial={(seleccionado) => setRespaldoHistorial(seleccionado)}
-                    alEliminar={(seleccionado) => setRespaldoEliminar(seleccionado)}
-                    alAlternarActivo={(seleccionado) => void alAlternarActivo(seleccionado)}
-                    alEditar={(seleccionado) => setRespaldoEditar(seleccionado)}
-                    alAbrirMenuContextual={abrirMenuContextual}
-                  />
-                ))}
-              </div>
-            ) : (
-              !cargando &&
-              !mensajeRespaldos && (
-                <div className="copias-vacio">
-                  <strong>No hay copias configuradas</strong>
-                  <p>Crea una tarea para programar su frecuencia, horario y consultar su historial.</p>
-                  <button className="boton" type="button" onClick={abrirNuevaCopia}>
-                    Crear backup
-                  </button>
+          {seccionActiva === 'seccion-informes' ? (
+            <ReportsSection respaldos={respaldos} />
+          ) : (
+            <section className="seccion">
+              <div className="seccion__encabezado">
+                <div>
+                  <h2>Copias configuradas</h2>
+                  <p>
+                    {respaldos.length === 0
+                      ? 'Aún no hay tareas de respaldo.'
+                      : `${respaldos.length} ${respaldos.length === 1 ? 'tarea configurada' : 'tareas configuradas'}`}
+                  </p>
                 </div>
-              )
-            )}
-          </section>
+              </div>
+
+              {mensajeRespaldos && (
+                <p className="mensaje-error" role="alert">
+                  {mensajeRespaldos}
+                </p>
+              )}
+
+              {respaldos.length > 0 ? (
+                <div className="copias-grid">
+                  {respaldos.map((respaldo) => (
+                    <BackupCard
+                      key={respaldo.id}
+                      respaldo={respaldo}
+                      ahora={ahora}
+                      ejecutando={ejecucionesActivas.has(respaldo.id)}
+                      alVerHistorial={(seleccionado) => setRespaldoHistorial(seleccionado)}
+                      alEliminar={(seleccionado) => setRespaldoEliminar(seleccionado)}
+                      alAlternarActivo={(seleccionado) => void alAlternarActivo(seleccionado)}
+                      alEditar={(seleccionado) => setRespaldoEditar(seleccionado)}
+                      alAbrirMenuContextual={abrirMenuContextual}
+                    />
+                  ))}
+                </div>
+              ) : (
+                !cargando &&
+                !mensajeRespaldos && (
+                  <div className="copias-vacio">
+                    <strong>No hay copias configuradas</strong>
+                    <p>Crea una tarea para programar su frecuencia, horario y consultar su historial.</p>
+                    <button className="boton" type="button" onClick={abrirNuevaCopia}>
+                      Crear backup
+                    </button>
+                  </div>
+                )
+              )}
+            </section>
+          )}
         </div>
       </div>
 
-      <button
-        type="button"
-        className="boton-flotante"
-        aria-label="Nuevo backup"
-        title="Nuevo backup"
-        onClick={abrirNuevaCopia}
-      >
-        <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
-          <path d="M11 4v14M4 11h14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-      </button>
+      {seccionActiva === 'seccion-copias' && (
+        <button
+          type="button"
+          className="boton-flotante"
+          aria-label="Nuevo backup"
+          title="Nuevo backup"
+          onClick={abrirNuevaCopia}
+        >
+          <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+            <path d="M11 4v14M4 11h14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </button>
+      )}
 
       {menuContextual && (
         <ContextMenu

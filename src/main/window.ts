@@ -23,6 +23,8 @@ export function marcarSalida(): void {
 
 export function crearVentanaPrincipal(): BrowserWindow {
   const esMac = process.platform === 'darwin';
+  // El servidor de Vite solo existe en desarrollo, nunca en la app empaquetada.
+  const esDesarrollo = Boolean(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   const inicioOculto = process.argv.includes(ARGUMENTO_INICIO_OCULTO);
   const iniciarMinimizado =
     inicioOculto ||
@@ -57,8 +59,37 @@ export function crearVentanaPrincipal(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      // Las herramientas de desarrollo solo se habilitan en modo dev.
+      devTools: esDesarrollo,
     },
   });
+
+  if (esDesarrollo) {
+    // F12 o Ctrl+Shift+I abren y cierran las herramientas del navegador.
+    ventana.webContents.on('before-input-event', (evento, entrada) => {
+      if (entrada.type !== 'keyDown') {
+        return;
+      }
+
+      const atajo =
+        entrada.key === 'F12' ||
+        ((entrada.control || entrada.meta) &&
+          entrada.shift &&
+          entrada.key.toLowerCase() === 'i');
+
+      if (!atajo) {
+        return;
+      }
+
+      evento.preventDefault();
+
+      if (ventana.webContents.isDevToolsOpened()) {
+        ventana.webContents.closeDevTools();
+      } else {
+        ventana.webContents.openDevTools({ mode: 'detach' });
+      }
+    });
+  }
 
   if (siempreVisible) {
     ventana.setAlwaysOnTop(true);
