@@ -5,7 +5,6 @@ import {
   Menu,
   nativeImage,
   Notification,
-  shell,
   Tray,
   type NativeImage,
 } from 'electron';
@@ -168,12 +167,10 @@ export function avisarYaEnEjecucion(): void {
   );
 }
 
-export function avisarActualizacionDisponible(version: string, urlPublicacion: string): void {
+export function avisarActualizacionDisponible(version: string, alHacerClic: () => void): void {
   mostrarAviso(
     `Nueva versión disponible: ${version}`,
-    'Hay una nueva versión de BackupArc disponible. Haz clic en este aviso para ver los detalles.',
-    () => {
-      void shell.openExternal(urlPublicacion);
-    },
+    'Hay una nueva versión de BackupArc disponible. Haz clic en este aviso para descargarla e instalarla.',
+    alHacerClic,
   );
 }

@@ -10,7 +10,7 @@ import type {
   ProgresoDescargaActualizacion,
   ResultadoActualizacion,
 } from '../../shared/types/api.types';
-import { avisarActualizacionDisponible } from '../tray';
+import { avisarActualizacionDisponible, mostrarVentanaPrincipal } from '../tray';
 import { logger } from '../utils/logger';
 import { marcarSalida } from '../window';
 import { obtenerPreferenciaConDefecto } from './local-database.service';
@@ -324,7 +324,13 @@ async function comprobarEnSegundoPlano(): Promise<void> {
       resultado.versionDisponible !== versionAvisada
     ) {
       versionAvisada = resultado.versionDisponible;
-      avisarActualizacionDisponible(resultado.versionDisponible, resultado.urlPublicacion);
+      avisarActualizacionDisponible(resultado.versionDisponible, () => {
+        // Se muestra la ventana para que el progreso de la descarga sea visible.
+        mostrarVentanaPrincipal();
+        void instalarActualizacion().catch((error: unknown) => {
+          logger.warn('No se pudo descargar la actualización desde el aviso', error);
+        });
+      });
     }
   } catch (error) {
     logger.warn('Falló la comprobación de actualizaciones', error);
