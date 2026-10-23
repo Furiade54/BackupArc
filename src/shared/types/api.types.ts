@@ -1,5 +1,12 @@
 import type { ArchivoRespaldo } from './archivo.types';
-import type { EjecucionRespaldo, NuevoRespaldo, RespaldoConfigurado } from './respaldo.types';
+import type {
+  ConexionMssql,
+  EjecucionRespaldo,
+  InventarioBak,
+  NuevoRespaldo,
+  RespaldoConfigurado,
+  ResumenConexionMssql,
+} from './respaldo.types';
 
 export type ResultadoIpc<T> = { ok: true; datos: T } | { ok: false; error: string };
 
@@ -48,22 +55,8 @@ export interface EstadoConexion {
   version?: string;
 }
 
-export interface ConfiguracionMssql {
-  servidor: string;
-  puerto: number;
-  baseDatos: string;
-  usuario: string;
-  /** Vacío al guardar conserva la contraseña que ya estaba almacenada. */
-  contrasena: string;
-  /** encrypt: exige TLS en la conexión. */
-  cifrado: boolean;
-  /** trustServerCertificate: acepta certificados no firmados por una CA de confianza. */
-  confiarCertificado: boolean;
-}
-
-export interface ResumenConfiguracionMssql extends Omit<ConfiguracionMssql, 'contrasena'> {
-  tieneContrasena: boolean;
-}
+export type ConfiguracionMssql = ConexionMssql;
+export type ResumenConfiguracionMssql = ResumenConexionMssql;
 
 export interface ResultadoPruebaMssql {
   ok: boolean;
@@ -100,15 +93,20 @@ export interface ApiElectron {
   };
   dialogos: {
     seleccionarCarpeta: (rutaInicial?: string) => Promise<ResultadoIpc<string | null>>;
+    seleccionarArchivo: (rutaInicial?: string) => Promise<ResultadoIpc<string | null>>;
   };
   sistema: {
     abrirRuta: (ruta: string) => Promise<ResultadoIpc<void>>;
   };
   mssql: {
-    obtener: () => Promise<ResultadoIpc<ResumenConfiguracionMssql>>;
-    guardar: (datos: ConfiguracionMssql) => Promise<ResultadoIpc<ResumenConfiguracionMssql>>;
-    probar: (datos: ConfiguracionMssql) => Promise<ResultadoIpc<ResultadoPruebaMssql>>;
-    basesDatos: () => Promise<ResultadoIpc<BaseDatosMssql[]>>;
+    probar: (
+      datos: ConfiguracionMssql,
+      respaldoId?: number,
+    ) => Promise<ResultadoIpc<ResultadoPruebaMssql>>;
+    basesDatos: (
+      datos: ConfiguracionMssql | null,
+      respaldoId?: number,
+    ) => Promise<ResultadoIpc<BaseDatosMssql[]>>;
   };
   preferencias: {
     obtener: (clave: string) => Promise<ResultadoIpc<string | null>>;
@@ -137,6 +135,7 @@ export interface ApiElectron {
     eliminar: (id: number) => Promise<ResultadoIpc<void>>;
     establecerActivo: (id: number, habilitado: boolean) => Promise<ResultadoIpc<void>>;
     historial: (id: number) => Promise<ResultadoIpc<EjecucionRespaldo[]>>;
+    inventarioBak: (id: number) => Promise<ResultadoIpc<InventarioBak>>;
   };
   archivos: {
     listar: (limite?: number) => Promise<ResultadoIpc<ArchivoRespaldo[]>>;

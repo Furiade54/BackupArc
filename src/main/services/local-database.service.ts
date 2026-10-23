@@ -138,8 +138,10 @@ export function inicializarBaseDatosLocal(): void {
       retencion_dias INTEGER NOT NULL,
       copia_con_fecha INTEGER NOT NULL DEFAULT 1,
       comprimir INTEGER NOT NULL DEFAULT 0,
+      mssql_conexion TEXT,
       habilitado INTEGER NOT NULL DEFAULT 1,
       ultima_ejecucion TEXT,
+      fallo_desde TEXT,
       proxima_ejecucion TEXT NOT NULL,
       ultimo_estado TEXT NOT NULL DEFAULT 'pendiente',
       creado_en TEXT NOT NULL
@@ -180,6 +182,103 @@ export function inicializarBaseDatosLocal(): void {
 
   if (!columnasRespaldos.some((columna) => columna.name === 'comprimir')) {
     conexion.exec('ALTER TABLE respaldos ADD COLUMN comprimir INTEGER NOT NULL DEFAULT 0');
+  }
+
+  if (!columnasRespaldos.some((columna) => columna.name === 'mssql_conexion')) {
+    conexion.exec('ALTER TABLE respaldos ADD COLUMN mssql_conexion TEXT');
+  }
+
+  if (!columnasRespaldos.some((columna) => columna.name === 'fallo_desde')) {
+    conexion.exec('ALTER TABLE respaldos ADD COLUMN fallo_desde TEXT');
+  }
+
+  // Recalcula el inicio de la racha de fallas desde el historial: corrige tanto
+  // tareas que venían fallando antes de existir esta columna como valores
+  // guardados incorrectamente por versiones anteriores.
+  conexion.exec(`
+    UPDATE respaldos
+    SET fallo_desde = COALESCE((
+      SELECT MIN(e.fecha)
+      FROM ejecuciones_respaldo e
+      WHERE e.respaldo_id = respaldos.id
+        AND e.estado = 'error'
+        AND e.fecha > COALESCE(
+          (SELECT MAX(e2.fecha)
+           FROM ejecuciones_respaldo e2
+           WHERE e2.respaldo_id = respaldos.id AND e2.estado <> 'error'),
+          ''
+        )
+    ), fallo_desde)
+    WHERE ultimo_estado = 'error';
+  `);
+
+  // Backups completos y diferenciales de MSSQL. Se aplica en una transacción:
+  // o quedan todas las columnas y la tabla, o no se cambia nada.
+  conexion.exec('BEGIN IMMEDIATE');
+
+  try {
+    if (!columnasRespaldos.some((columna) => columna.name === 'modo_mssql')) {
+      conexion.exec("ALTER TABLE respaldos ADD COLUMN modo_mssql TEXT NOT NULL DEFAULT 'completo'");
+    }
+
+    if (!columnasRespaldos.some((columna) => columna.name === 'full_cada_dias')) {
+      conexion.exec('ALTER TABLE respaldos ADD COLUMN full_cada_dias INTEGER NOT NULL DEFAULT 7');
+    }
+
+    if (!columnasRespaldos.some((columna) => columna.name === 'comprimir_bak')) {
+      conexion.exec('ALTER TABLE respaldos ADD COLUMN comprimir_bak INTEGER NOT NULL DEFAULT 0');
+    }
+
+    if (!columnasRespaldos.some((columna) => columna.name === 'verificar_bak')) {
+      conexion.exec('ALTER TABLE respaldos ADD COLUMN verificar_bak INTEGER NOT NULL DEFAULT 0');
+    }
+
+    const columnasEjecuciones = conexion
+      .prepare('PRAGMA table_info(ejecuciones_respaldo)')
+      .all() as unknown as ColumnaTabla[];
+
+    if (!columnasEjecuciones.some((columna) => columna.name === 'tipo')) {
+      conexion.exec('ALTER TABLE ejecuciones_respaldo ADD COLUMN tipo TEXT');
+    }
+
+    if (!columnasEjecuciones.some((columna) => columna.name === 'run_id')) {
+      conexion.exec('ALTER TABLE ejecuciones_respaldo ADD COLUMN run_id TEXT');
+    }
+
+    conexion.exec(`
+      CREATE TABLE IF NOT EXISTS resultados_respaldo (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ejecucion_id INTEGER NOT NULL,
+        base_datos TEXT NOT NULL,
+        tipo_ejecutado TEXT NOT NULL,
+        archivo TEXT,
+        base_archivo TEXT,
+        base_guid TEXT,
+        base_lsn TEXT,
+        base_fecha TEXT,
+        tamano_bytes INTEGER,
+        compresion TEXT,
+        estado TEXT NOT NULL,
+        detalle TEXT,
+        FOREIGN KEY (ejecucion_id) REFERENCES ejecuciones_respaldo(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_resultados_respaldo
+        ON resultados_respaldo (ejecucion_id);
+    `);
+
+    const columnasResultados = conexion
+      .prepare('PRAGMA table_info(resultados_respaldo)')
+      .all() as unknown as ColumnaTabla[];
+
+    if (!columnasResultados.some((columna) => columna.name === 'compresion')) {
+      conexion.exec('ALTER TABLE resultados_respaldo ADD COLUMN compresion TEXT');
+    }
+
+    conexion.exec('COMMIT');
+  } catch (error) {
+    conexion.exec('ROLLBACK');
+    throw error;
   }
 
   if (columnasRespaldos.some((columna) => columna.name === 'frecuencia_horas')) {

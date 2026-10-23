@@ -1,5 +1,10 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import type { RespaldoConfigurado, TipoRespaldo } from '../../../shared/types/respaldo.types';
+import { useState, type FormEvent } from 'react';
+import type { ConfiguracionMssql } from '../../../shared/types/api.types';
+import type {
+  ModoRespaldoMssql,
+  RespaldoConfigurado,
+  TipoRespaldo,
+} from '../../../shared/types/respaldo.types';
 import { parsearBasesDatos, serializarBasesDatos } from '../../../shared/utils/bases-datos';
 import { MssqlConfigModal } from './MssqlConfigModal';
 import { MssqlDatabasesModal } from './MssqlDatabasesModal';
@@ -57,6 +62,12 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
   const [retencion, setRetencion] = useState(String(respaldo?.retencionDias ?? 7));
   const [copiaConFecha, setCopiaConFecha] = useState(respaldo?.copiaConFecha ?? true);
   const [comprimir, setComprimir] = useState(respaldo?.comprimir ?? false);
+  const [modoMssql, setModoMssql] = useState<ModoRespaldoMssql>(
+    respaldo?.modoMssql ?? 'completo',
+  );
+  const [fullCadaDias, setFullCadaDias] = useState(String(respaldo?.fullCadaDias ?? 7));
+  const [comprimirBak, setComprimirBak] = useState(respaldo?.comprimirBak ?? false);
+  const [verificarBak, setVerificarBak] = useState(respaldo?.verificarBak ?? false);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [indicePaso, setIndicePaso] = useState(0);
@@ -65,44 +76,34 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
   );
   const [basesDatosAbiertas, setBasesDatosAbiertas] = useState(false);
   const [configuracionMssqlAbierta, setConfiguracionMssqlAbierta] = useState(false);
-  // null mientras se consulta; false indica credenciales incompletas.
-  const [credencialesMssqlListas, setCredencialesMssqlListas] = useState<boolean | null>(null);
+  // Cada tarea guarda su propia conexión; no se hereda la de otra tarea.
+  const [conexionMssql, setConexionMssql] = useState<ConfiguracionMssql | null>(() => {
+    const resumen = respaldo?.conexionMssql;
 
-  useEffect(() => {
-    let cancelado = false;
+    return resumen ? { ...resumen, contrasena: '' } : null;
+  });
+  const [tieneContrasenaMssql, setTieneContrasenaMssql] = useState(
+    respaldo?.conexionMssql?.tieneContrasena ?? false,
+  );
 
-    void (async () => {
-      try {
-        const resultado = await window.api.mssql.obtener();
-
-        if (cancelado || !resultado.ok) {
-          return;
-        }
-
-        const { servidor, usuario, tieneContrasena } = resultado.datos;
-        setCredencialesMssqlListas(
-          servidor.trim().length > 0 && usuario.trim().length > 0 && tieneContrasena,
-        );
-      } catch {
-        if (!cancelado) {
-          setCredencialesMssqlListas(null);
-        }
-      }
-    })();
-
-    return () => {
-      cancelado = true;
-    };
-  }, []);
+  const credencialesMssqlListas =
+    conexionMssql !== null &&
+    conexionMssql.servidor.trim().length > 0 &&
+    conexionMssql.usuario.trim().length > 0 &&
+    (tieneContrasenaMssql || conexionMssql.contrasena.length > 0);
+  // El usuario indica en la conexión si el servidor es remoto; el explorador
+  // de carpetas solo recorre este equipo, así que ahí no aplica.
+  const servidorMssqlRemoto = conexionMssql?.esRemoto === true;
 
   const frecuenciaMinutos =
     frecuencia === VALOR_PERSONALIZADO ? Number(minutosPersonalizados) : Number(frecuencia);
   const usaHoraFija = frecuenciaMinutos >= MINUTOS_POR_DIA;
   const esMssql = tipo === 'mssql';
   const retencionDias = Number(retencion);
+  const fullCadaDiasNumero = Number(fullCadaDias);
 
-  // Los respaldos MSSQL no tienen empaquetado ni retención local.
-  const pasos = esMssql ? PASOS.filter((paso) => paso.id !== 'opciones') : PASOS;
+  // En MSSQL el paso Opciones también aplica: modo, base full y verificación.
+  const pasos = PASOS;
   const indiceActual = Math.min(indicePaso, pasos.length - 1);
   const pasoActual = pasos[indiceActual];
   const esUltimoPaso = indiceActual === pasos.length - 1;
@@ -113,7 +114,7 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
         return 'Escribe un nombre para el backup.';
       }
 
-      if (esMssql && credencialesMssqlListas === false) {
+      if (esMssql && !credencialesMssqlListas) {
         return 'Configura las credenciales de SQL Server con el engranaje antes de continuar.';
       }
 
@@ -148,8 +149,24 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
       return null;
     }
 
-    if (!Number.isInteger(retencionDias) || retencionDias < 1 || retencionDias > 3650) {
-      return 'La retención debe ser un número entero entre 1 y 3650 días.';
+    if (id === 'opciones') {
+      if (esMssql) {
+        if (
+          !Number.isInteger(fullCadaDiasNumero) ||
+          fullCadaDiasNumero < 1 ||
+          fullCadaDiasNumero > 365
+        ) {
+          return 'La antigüedad máxima del full debe ser un entero entre 1 y 365 días.';
+        }
+
+        return null;
+      }
+
+      if (!Number.isInteger(retencionDias) || retencionDias < 1 || retencionDias > 3650) {
+        return 'La retención debe ser un número entero entre 1 y 3650 días.';
+      }
+
+      return null;
     }
 
     return null;
@@ -175,6 +192,31 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
     }
   };
 
+  const abrirBasesDatos = () => {
+    if (!credencialesMssqlListas) {
+      setError(
+        'Configura las credenciales de SQL Server con el engranaje antes de explorar las bases.',
+      );
+      return;
+    }
+
+    setError(null);
+    setBasesDatosAbiertas(true);
+  };
+
+  const explorarArchivo = async () => {
+    const resultado = await window.api.dialogos.seleccionarArchivo(origen.trim() || undefined);
+
+    if (!resultado.ok) {
+      setError(resultado.error);
+      return;
+    }
+
+    if (resultado.datos) {
+      setOrigen(resultado.datos);
+    }
+  };
+
   const guardar = async () => {
     const problema = pasos
       .map((paso) => ({ paso, mensaje: validarPaso(paso.id) }))
@@ -194,12 +236,17 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
         nombre: nombre.trim(),
         tipo,
         origen: esMssql ? serializarBasesDatos(basesDatos) : origen.trim(),
+        conexionMssql: esMssql ? conexionMssql : null,
         destino: destino.trim(),
         frecuenciaMinutos,
         horaEjecucion: hora,
         retencionDias,
         copiaConFecha,
         comprimir: esMssql ? false : comprimir,
+        modoMssql: esMssql ? modoMssql : 'completo',
+        fullCadaDias: esMssql ? fullCadaDiasNumero : 7,
+        comprimirBak: esMssql ? comprimirBak : false,
+        verificarBak: esMssql ? verificarBak : false,
       };
 
       const resultado = respaldo
@@ -287,20 +334,6 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
             {pasoActual.id === 'tipo' && (
               <>
                 <div className="campo">
-                  <label htmlFor="backup-nombre">Nombre</label>
-                  <input
-                    id="backup-nombre"
-                    type="text"
-                    value={nombre}
-                    maxLength={80}
-                    placeholder="Ej. Backup documentos"
-                    autoFocus
-                    disabled={guardando}
-                    onChange={(evento) => setNombre(evento.target.value)}
-                  />
-                </div>
-
-                <div className="campo">
                   <label htmlFor="backup-tipo">Tipo de backup</label>
                   <div className="campo__ruta">
                     <select
@@ -320,17 +353,17 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                       <button
                         type="button"
                         className={`campo__configurar${
-                          credencialesMssqlListas === false ? ' campo__configurar--pendiente' : ''
+                          credencialesMssqlListas ? '' : ' campo__configurar--pendiente'
                         }`}
                         title={
-                          credencialesMssqlListas === false
-                            ? 'Faltan las credenciales del servidor: haz clic aquí para configurarlas'
-                            : 'Configurar credenciales de SQL Server'
+                          credencialesMssqlListas
+                            ? 'Configurar la conexión de este servidor'
+                            : 'Faltan las credenciales del servidor: haz clic aquí para configurarlas'
                         }
                         aria-label={
-                          credencialesMssqlListas === false
-                            ? 'Faltan las credenciales del servidor. Configurar SQL Server'
-                            : 'Configurar credenciales de SQL Server'
+                          credencialesMssqlListas
+                            ? 'Configurar la conexión de SQL Server'
+                            : 'Faltan las credenciales del servidor. Configurar SQL Server'
                         }
                         disabled={guardando}
                         onClick={() => setConfiguracionMssqlAbierta(true)}
@@ -344,6 +377,20 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                       ? 'El respaldo se ejecuta en el servidor SQL y el .bak queda en la carpeta destino de ese servidor.'
                       : 'Copia carpetas o archivos del equipo al destino indicado.'}
                   </span>
+                </div>
+
+                <div className="campo">
+                  <label htmlFor="backup-nombre">Nombre</label>
+                  <input
+                    id="backup-nombre"
+                    type="text"
+                    value={nombre}
+                    maxLength={80}
+                    placeholder="Ej. Backup documentos"
+                    autoFocus
+                    disabled={guardando}
+                    onChange={(evento) => setNombre(evento.target.value)}
+                  />
                 </div>
               </>
             )}
@@ -362,13 +409,13 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                         title={basesDatos.join(', ')}
                         readOnly
                         disabled={guardando}
-                        onClick={() => setBasesDatosAbiertas(true)}
+                        onClick={abrirBasesDatos}
                       />
                       <button
                         type="button"
                         className="boton boton--secundario"
                         disabled={guardando}
-                        onClick={() => setBasesDatosAbiertas(true)}
+                        onClick={abrirBasesDatos}
                       >
                         Explorar
                       </button>
@@ -397,14 +444,25 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                       <button
                         type="button"
                         className="boton boton--secundario"
+                        title="Seleccionar una carpeta"
                         disabled={guardando}
                         onClick={() => void explorarCarpeta('origen')}
                       >
-                        Explorar
+                        Carpeta
+                      </button>
+                      <button
+                        type="button"
+                        className="boton boton--secundario"
+                        title="Seleccionar un archivo"
+                        disabled={guardando}
+                        onClick={() => void explorarArchivo()}
+                      >
+                        Archivo
                       </button>
                     </div>
                     <span className="campo__ayuda">
-                      Puedes indicar una carpeta (se copia completa) o un archivo suelto.
+                      Elige una carpeta completa o un archivo suelto; también puedes escribir la
+                      ruta.
                     </span>
                   </div>
                 )}
@@ -419,25 +477,39 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                       type="text"
                       value={destino}
                       maxLength={500}
-                      placeholder={esMssql ? 'Ej. D:\\Backups' : 'Lugar donde se guardará la copia'}
+                      placeholder={
+                        esMssql && servidorMssqlRemoto
+                          ? 'Ej. D:\\Backups (ruta del servidor)'
+                          : 'Lugar donde se guardará la copia'
+                      }
                       disabled={guardando}
                       onChange={(evento) => setDestino(evento.target.value)}
                     />
-                    <button
-                      type="button"
-                      className="boton boton--secundario"
-                      disabled={guardando}
-                      onClick={() => void explorarCarpeta('destino')}
-                    >
-                      Explorar
-                    </button>
+                    {(!esMssql || !servidorMssqlRemoto) && (
+                      <button
+                        type="button"
+                        className="boton boton--secundario"
+                        disabled={guardando}
+                        onClick={() => void explorarCarpeta('destino')}
+                      >
+                        Explorar
+                      </button>
+                    )}
                   </div>
-                  {esMssql && (
-                    <span className="campo__ayuda">
-                      Ruta tal como la ve el servidor SQL. Debe existir y ser accesible por la cuenta
-                      del servicio.
-                    </span>
-                  )}
+                  {esMssql &&
+                    (servidorMssqlRemoto ? (
+                      <p className="campo__aviso" role="note">
+                        <strong>Servidor remoto:</strong> esta carpeta debe existir en{' '}
+                        <strong>{conexionMssql?.servidor}</strong>, no en este equipo. Escríbela tal
+                        como la ve el servidor SQL (por ejemplo <code>D:\Backups</code>) y créala
+                        allí antes del primer respaldo. Por eso aquí no aparece el botón Explorar.
+                      </p>
+                    ) : (
+                      <span className="campo__ayuda">
+                        Ruta tal como la ve el servidor SQL. Debe existir y ser accesible por la
+                        cuenta del servicio.
+                      </span>
+                    ))}
                 </div>
               </>
             )}
@@ -505,14 +577,18 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                     disabled={guardando}
                     onChange={(evento) => setCopiaConFecha(evento.target.value === 'fecha')}
                   >
-                    <option value="fecha">Con fecha y hora (Documentos_20261021-153000)</option>
-                    <option value="unica">Sin fecha (sobrescribe la copia anterior)</option>
+                    <option value="fecha">Con fecha y hora (Documentos_20261022131100)</option>
+                    <option value="unica">
+                      {esMssql
+                        ? 'Sin fecha en el nombre (sigue siendo único)'
+                        : 'Sin fecha (sobrescribe la copia anterior)'}
+                    </option>
                   </select>
                   <span className="campo__ayuda">
                     {esMssql
                       ? copiaConFecha
-                        ? 'Cada ejecución crea un archivo .bak nuevo con fecha y hora.'
-                        : 'Siempre se genera el mismo .bak y se reemplaza en cada ejecución.'
+                        ? 'Cada ejecución crea un .bak nuevo con fecha, tipo (full/diff) e identificador único.'
+                        : 'El .bak se nombra sin fecha; el tipo y un identificador único evitan que se sobrescriba.'
                       : copiaConFecha
                         ? `Cada ejecución crea ${comprimir ? 'un .zip nuevo' : 'una copia nueva'} y la retención borra ${
                             comprimir ? 'los anteriores' : 'las anteriores'
@@ -525,42 +601,120 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
 
             {pasoActual.id === 'opciones' && (
               <>
-                <div className="campo">
-                  <label htmlFor="backup-formato">Formato del destino</label>
-                  <select
-                    id="backup-formato"
-                    value={comprimir ? 'zip' : 'carpeta'}
-                    disabled={guardando}
-                    onChange={(evento) => setComprimir(evento.target.value === 'zip')}
-                  >
-                    <option value="carpeta">Carpeta descomprimida</option>
-                    <option value="zip">Archivo .zip</option>
-                  </select>
-                  <span className="campo__ayuda">
-                    {comprimir
-                      ? 'La copia llega al destino como un único archivo comprimido.'
-                      : 'La copia llega al destino con las carpetas y archivos tal cual.'}
-                  </span>
-                </div>
+                {esMssql ? (
+                  <>
+                    <div className="campo">
+                      <label htmlFor="backup-modo">Modo del backup</label>
+                      <select
+                        id="backup-modo"
+                        value={modoMssql}
+                        disabled={guardando}
+                        onChange={(evento) =>
+                          setModoMssql(evento.target.value as ModoRespaldoMssql)
+                        }
+                      >
+                        <option value="completo">Completo en cada ejecución</option>
+                        <option value="diferencial">Diferencial sobre un full base</option>
+                      </select>
+                      <span className="campo__ayuda">
+                        {modoMssql === 'diferencial'
+                          ? 'Solo se guardan los cambios desde el último full. Si no hay un full válido, la app lo genera automáticamente.'
+                          : 'Cada ejecución guarda la base completa en un .bak.'}
+                      </span>
+                    </div>
 
-                <div className="campo">
-                  <label htmlFor="backup-retencion">Retención (días)</label>
-                  <input
-                    id="backup-retencion"
-                    type="number"
-                    min={1}
-                    max={3650}
-                    step={1}
-                    value={retencion}
-                    disabled={guardando || !copiaConFecha}
-                    onChange={(evento) => setRetencion(evento.target.value)}
-                  />
-                  {!copiaConFecha && (
-                    <span className="campo__ayuda">
-                      No aplica cuando la copia sobrescribe la anterior.
-                    </span>
-                  )}
-                </div>
+                    {modoMssql === 'diferencial' && (
+                      <div className="campo">
+                        <label htmlFor="backup-full-dias">Antigüedad máxima del full (días)</label>
+                        <input
+                          id="backup-full-dias"
+                          type="number"
+                          min={1}
+                          max={365}
+                          step={1}
+                          value={fullCadaDias}
+                          disabled={guardando}
+                          onChange={(evento) => setFullCadaDias(evento.target.value)}
+                        />
+                        <span className="campo__ayuda">
+                          Si el full base supera estos días, la siguiente ejecución genera un full
+                          nuevo. No es la frecuencia de la tarea.
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="campo__casillas">
+                      <label className="campo__casilla">
+                        <input
+                          type="checkbox"
+                          checked={comprimirBak}
+                          disabled={guardando}
+                          onChange={(evento) => setComprimirBak(evento.target.checked)}
+                        />
+                        Comprimir el .bak (WITH COMPRESSION)
+                      </label>
+
+                      <label className="campo__casilla">
+                        <input
+                          type="checkbox"
+                          checked={verificarBak}
+                          disabled={guardando}
+                          onChange={(evento) => setVerificarBak(evento.target.checked)}
+                        />
+                        Verificar el .bak al terminar (RESTORE VERIFYONLY)
+                      </label>
+
+                      <span className="campo__ayuda">
+                        La verificación lee el archivo completo y puede alargar la ejecución. Si la
+                        edición no admite compresión, el backup se hace sin ella y queda registrado.
+                      </span>
+                    </div>
+
+                    <p className="campo__aviso" role="note">
+                      Los .bak se guardan en el servidor SQL y no se borran automáticamente desde la
+                      app.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="campo">
+                      <label htmlFor="backup-formato">Formato del destino</label>
+                      <select
+                        id="backup-formato"
+                        value={comprimir ? 'zip' : 'carpeta'}
+                        disabled={guardando}
+                        onChange={(evento) => setComprimir(evento.target.value === 'zip')}
+                      >
+                        <option value="carpeta">Carpeta descomprimida</option>
+                        <option value="zip">Archivo .zip</option>
+                      </select>
+                      <span className="campo__ayuda">
+                        {comprimir
+                          ? 'La copia llega al destino como un único archivo comprimido.'
+                          : 'La copia llega al destino con las carpetas y archivos tal cual.'}
+                      </span>
+                    </div>
+
+                    <div className="campo">
+                      <label htmlFor="backup-retencion">Retención (días)</label>
+                      <input
+                        id="backup-retencion"
+                        type="number"
+                        min={1}
+                        max={3650}
+                        step={1}
+                        value={retencion}
+                        disabled={guardando || !copiaConFecha}
+                        onChange={(evento) => setRetencion(evento.target.value)}
+                      />
+                      {!copiaConFecha && (
+                        <span className="campo__ayuda">
+                          No aplica cuando la copia sobrescribe la anterior.
+                        </span>
+                      )}
+                    </div>
+                  </>
+                )}
               </>
             )}
           </div>
@@ -572,7 +726,7 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
           ) : (
             esMssql &&
             pasoActual.id === 'tipo' &&
-            credencialesMssqlListas === true && (
+            credencialesMssqlListas && (
               <p className="asistente__credenciales" role="status">
                 <span aria-hidden="true">✓</span> Credenciales configuradas
               </p>
@@ -619,6 +773,8 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
       {basesDatosAbiertas && (
         <MssqlDatabasesModal
           seleccionadas={basesDatos}
+          conexion={conexionMssql}
+          respaldoId={respaldo?.id}
           alCerrar={() => setBasesDatosAbiertas(false)}
           alConfirmar={(bases) => {
             setBasesDatos(bases);
@@ -630,31 +786,19 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
 
       {configuracionMssqlAbierta && (
         <MssqlConfigModal
-          alCerrar={() => {
+          inicial={conexionMssql}
+          tieneContrasena={tieneContrasenaMssql}
+          respaldoId={respaldo?.id}
+          alCerrar={() => setConfiguracionMssqlAbierta(false)}
+          alGuardar={(datos) => {
+            setConexionMssql(datos);
+
+            if (datos.contrasena) {
+              setTieneContrasenaMssql(true);
+            }
+
+            setError(null);
             setConfiguracionMssqlAbierta(false);
-
-            // Al guardar (o cancelar) se vuelve a comprobar si ya hay credenciales.
-            void (async () => {
-              try {
-                const resultado = await window.api.mssql.obtener();
-
-                if (!resultado.ok) {
-                  return;
-                }
-
-                const { servidor, usuario, tieneContrasena } = resultado.datos;
-                const listas =
-                  servidor.trim().length > 0 && usuario.trim().length > 0 && tieneContrasena;
-
-                setCredencialesMssqlListas(listas);
-
-                if (listas) {
-                  setError(null);
-                }
-              } catch {
-                setCredencialesMssqlListas(null);
-              }
-            })();
           }}
         />
       )}

@@ -1,65 +1,40 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { ConfiguracionMssql } from '../../../shared/types/api.types';
+import { pareceServidorRemoto } from '../../../shared/utils/servidor-mssql';
 import { Modal } from './Modal';
 import './BackupModals.css';
 
 interface MssqlConfigModalProps {
+  inicial: ConfiguracionMssql | null;
+  tieneContrasena: boolean;
+  respaldoId?: number;
   alCerrar: () => void;
+  alGuardar: (datos: ConfiguracionMssql) => void;
 }
 
-export function MssqlConfigModal({ alCerrar }: MssqlConfigModalProps) {
-  const [servidor, setServidor] = useState('');
-  const [puerto, setPuerto] = useState('1433');
-  const [baseDatos, setBaseDatos] = useState('master');
-  const [usuario, setUsuario] = useState('');
+export function MssqlConfigModal({
+  inicial,
+  tieneContrasena,
+  respaldoId,
+  alCerrar,
+  alGuardar,
+}: MssqlConfigModalProps) {
+  const [servidor, setServidor] = useState(inicial?.servidor ?? '');
+  const [puerto, setPuerto] = useState(String(inicial?.puerto ?? 1433));
+  const [baseDatos, setBaseDatos] = useState(inicial?.baseDatos ?? 'master');
+  const [usuario, setUsuario] = useState(inicial?.usuario ?? '');
   const [contrasena, setContrasena] = useState('');
-  const [cifrado, setCifrado] = useState(false);
-  const [confiarCertificado, setConfiarCertificado] = useState(true);
-  const [tieneContrasena, setTieneContrasena] = useState(false);
-  const [cargando, setCargando] = useState(true);
+  const [cifrado, setCifrado] = useState(inicial?.cifrado ?? false);
+  const [confiarCertificado, setConfiarCertificado] = useState(
+    inicial?.confiarCertificado ?? true,
+  );
+  // La ubicación la define el usuario; mientras no la toque se propone según el host.
+  const [esRemoto, setEsRemoto] = useState(inicial?.esRemoto ?? false);
+  const [ubicacionElegida, setUbicacionElegida] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [probando, setProbando] = useState(false);
   const [prueba, setPrueba] = useState<{ ok: boolean; mensaje: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelado = false;
-
-    void (async () => {
-      try {
-        const resultado = await window.api.mssql.obtener();
-
-        if (cancelado) {
-          return;
-        }
-
-        if (!resultado.ok) {
-          setError(resultado.error);
-          return;
-        }
-
-        setServidor(resultado.datos.servidor);
-        setPuerto(String(resultado.datos.puerto));
-        setBaseDatos(resultado.datos.baseDatos);
-        setUsuario(resultado.datos.usuario);
-        setCifrado(resultado.datos.cifrado);
-        setConfiarCertificado(resultado.datos.confiarCertificado);
-        setTieneContrasena(resultado.datos.tieneContrasena);
-      } catch {
-        if (!cancelado) {
-          setError('No se pudo leer la configuración de SQL Server.');
-        }
-      } finally {
-        if (!cancelado) {
-          setCargando(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelado = true;
-    };
-  }, []);
 
   const recolectar = (): ConfiguracionMssql => ({
     servidor: servidor.trim(),
@@ -69,7 +44,16 @@ export function MssqlConfigModal({ alCerrar }: MssqlConfigModalProps) {
     contrasena,
     cifrado,
     confiarCertificado,
+    esRemoto,
   });
+
+  const cambiarServidor = (valor: string) => {
+    setServidor(valor);
+
+    if (!ubicacionElegida) {
+      setEsRemoto(pareceServidorRemoto(valor));
+    }
+  };
 
   const validar = (): string | null => {
     if (!servidor.trim()) {
@@ -106,7 +90,7 @@ export function MssqlConfigModal({ alCerrar }: MssqlConfigModalProps) {
     setPrueba(null);
 
     try {
-      const resultado = await window.api.mssql.probar(recolectar());
+      const resultado = await window.api.mssql.probar(recolectar(), respaldoId);
 
       if (!resultado.ok) {
         setError(resultado.error);
@@ -140,7 +124,7 @@ export function MssqlConfigModal({ alCerrar }: MssqlConfigModalProps) {
 
     try {
       // Solo se guardan credenciales que ya lograron conectar.
-      const comprobacion = await window.api.mssql.probar(recolectar());
+      const comprobacion = await window.api.mssql.probar(recolectar(), respaldoId);
 
       if (!comprobacion.ok) {
         setError(comprobacion.error);
@@ -152,14 +136,7 @@ export function MssqlConfigModal({ alCerrar }: MssqlConfigModalProps) {
         return;
       }
 
-      const resultado = await window.api.mssql.guardar(recolectar());
-
-      if (!resultado.ok) {
-        setError(resultado.error);
-        return;
-      }
-
-      alCerrar();
+      alGuardar(recolectar());
     } catch {
       setError('No se pudo guardar la configuración.');
     } finally {
@@ -167,7 +144,7 @@ export function MssqlConfigModal({ alCerrar }: MssqlConfigModalProps) {
     }
   };
 
-  const ocupado = guardando || probando || cargando;
+  const ocupado = guardando || probando;
 
   return (
     <Modal titulo="Conexión SQL Server" alCerrar={alCerrar} clase="modal--conexion">
@@ -183,7 +160,7 @@ export function MssqlConfigModal({ alCerrar }: MssqlConfigModalProps) {
               placeholder="192.168.1.10 o MI-SERVIDOR"
               autoFocus
               disabled={ocupado}
-              onChange={(evento) => setServidor(evento.target.value)}
+              onChange={(evento) => cambiarServidor(evento.target.value)}
             />
           </div>
 
@@ -203,6 +180,27 @@ export function MssqlConfigModal({ alCerrar }: MssqlConfigModalProps) {
         </div>
 
         <div className="campo">
+          <label htmlFor="mssql-ubicacion">Ubicación del servidor</label>
+          <select
+            id="mssql-ubicacion"
+            value={esRemoto ? 'remoto' : 'local'}
+            disabled={ocupado}
+            onChange={(evento) => {
+              setUbicacionElegida(true);
+              setEsRemoto(evento.target.value === 'remoto');
+            }}
+          >
+            <option value="local">Local (SQL Server en este equipo)</option>
+            <option value="remoto">Remoto (SQL Server en otro equipo)</option>
+          </select>
+          <span className="campo__ayuda">
+            {esRemoto
+              ? 'La carpeta destino del respaldo debe existir en ese servidor, no en este equipo. Por eso no se ofrece el explorador de carpetas.'
+              : 'SQL Server corre en este equipo, así que la carpeta destino también es local y se puede elegir con el explorador.'}
+          </span>
+        </div>
+
+        <div className="campo">
           <label htmlFor="mssql-base-datos">Base de datos de conexión</label>
           <input
             id="mssql-base-datos"
@@ -214,7 +212,7 @@ export function MssqlConfigModal({ alCerrar }: MssqlConfigModalProps) {
             onChange={(evento) => setBaseDatos(evento.target.value)}
           />
           <span className="campo__ayuda">
-            Solo se usa para conectar; la base a respaldar se indica en cada tarea.
+            Solo se usa para conectar; las bases a respaldar se indican en cada tarea.
           </span>
         </div>
 

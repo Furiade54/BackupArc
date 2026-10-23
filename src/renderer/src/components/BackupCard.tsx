@@ -2,6 +2,7 @@ import type { RespaldoConfigurado } from '../../../shared/types/respaldo.types';
 import { formatearBasesDatos } from '../../../shared/utils/bases-datos';
 import {
   formatearAntiguedad,
+  formatearDuracionDetallada,
   formatearFechaHora,
   formatearFrecuencia,
   formatearHora,
@@ -87,27 +88,42 @@ export function BackupCard({
   alAbrirMenuContextual,
 }: BackupCardProps) {
   const inicioCiclo = respaldo.ultimaEjecucion ?? respaldo.creadoEn;
-  // La barra mide la antigüedad del último respaldo: 0 % recién copiado y
-  // 100 % cuando vence. Una ejecución fallida la deja llena en rojo.
+  // La barra mide el tiempo transcurrido desde la última ejecución (o desde la
+  // falla): 0 % recién ejecutado y 100 % cuando vence el ciclo.
   const vencio = ahora > new Date(respaldo.proximaEjecucion).getTime();
   const fallo = respaldo.ultimoEstado === 'error';
   // Se mide contra la frecuencia configurada, no contra la próxima ejecución
   // guardada, para que "7 h de 24 h" siempre corresponda al porcentaje.
   const duracionCicloMs = Math.max(respaldo.frecuenciaMinutos, 1) * 60_000;
   const transcurridoMs = ahora - new Date(inicioCiclo).getTime();
-  const porcentaje =
-    vencio || fallo ? 100 : Math.min(100, Math.max(0, (transcurridoMs / duracionCicloMs) * 100));
+  const porcentaje = vencio
+    ? 100
+    : Math.min(100, Math.max(0, (transcurridoMs / duracionCicloMs) * 100));
   const porcentajeRedondeado = Math.round(porcentaje);
   const estadoBarra: EstadoBarra = !respaldo.habilitado
     ? 'deshabilitado'
-    : estadoPorcentaje(porcentaje);
+    : fallo
+      ? 'vencida'
+      : estadoPorcentaje(porcentaje);
   const antiguedadTexto = respaldo.ultimaEjecucion
     ? formatearAntiguedad(respaldo.ultimaEjecucion, ahora)
     : 'Sin ejecuciones';
+  // La racha de fallas se cuenta desde la primera falla consecutiva.
+  const inicioFallo = respaldo.falloDesde ?? respaldo.ultimaEjecucion;
+  const duracionFallo = formatearDuracionDetallada(inicioFallo, ahora);
+  const etiquetaUltimo = fallo ? 'Viene fallando' : 'Último backup';
+  const valorUltimo = !respaldo.ultimaEjecucion
+    ? 'Sin ejecuciones'
+    : fallo
+      ? `hace ${duracionFallo}`
+      : antiguedadTexto;
+  const etiquetaMedidor = fallo ? 'Desde el último intento' : 'Antigüedad del backup';
   const frecuenciaTexto = formatearFrecuencia(respaldo.frecuenciaMinutos);
   const frecuenciaVisible = frecuenciaTexto.charAt(0).toUpperCase() + frecuenciaTexto.slice(1);
   const limiteTexto = frecuenciaTexto.replace(/^cada /, '');
-  const resumenAntiguedad = `Antigüedad: ${antiguedadTexto.replace(/^hace /, '')} de ${limiteTexto} (${porcentajeRedondeado}% · ${ETIQUETAS_BARRA[estadoBarra]})`;
+  const resumenAntiguedad = fallo
+    ? `Viene fallando desde ${inicioFallo ? formatearFechaHora(inicioFallo) : '—'}; último intento ${antiguedadTexto} (${porcentajeRedondeado}% · Fallida)`
+    : `Antigüedad: ${antiguedadTexto.replace(/^hace /, '')} de ${limiteTexto} (${porcentajeRedondeado}% · ${ETIQUETAS_BARRA[estadoBarra]})`;
   const origenVisible =
     respaldo.tipo === 'mssql' ? formatearBasesDatos(respaldo.origen) : respaldo.origen;
 
@@ -152,21 +168,29 @@ export function BackupCard({
       </header>
 
       <div className="tarjeta-respaldo__fila">
-        <span>Último backup</span>
-        <strong title={respaldo.ultimaEjecucion ? formatearFechaHora(respaldo.ultimaEjecucion) : undefined}>
-          {respaldo.ultimaEjecucion ? antiguedadTexto : 'Sin ejecuciones'}
+        <span>{etiquetaUltimo}</span>
+        <strong
+          title={
+            fallo && respaldo.ultimaEjecucion
+              ? `Último intento: ${formatearFechaHora(respaldo.ultimaEjecucion)}`
+              : respaldo.ultimaEjecucion
+                ? formatearFechaHora(respaldo.ultimaEjecucion)
+                : undefined
+          }
+        >
+          {valorUltimo}
         </strong>
       </div>
 
       <div className="tarjeta-respaldo__medidor">
-        <span className="tarjeta-respaldo__medidor-etiqueta">Antigüedad del backup</span>
+        <span className="tarjeta-respaldo__medidor-etiqueta">{etiquetaMedidor}</span>
         <span className="tarjeta-respaldo__porcentaje">{porcentajeRedondeado}%</span>
       </div>
 
       <div
         className={`barra-ciclo${ejecutando ? ' barra-ciclo--ejecutando' : ''}`}
         role="progressbar"
-        aria-label="Antigüedad del backup"
+        aria-label={etiquetaMedidor}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={porcentajeRedondeado}
@@ -188,12 +212,13 @@ export function BackupCard({
 
       <p className="tarjeta-respaldo__repeticion">
         {frecuenciaVisible}
-        {respaldo.tipo === 'mssql' && ' · MSSQL'}
+        {respaldo.tipo === 'mssql' &&
+          (respaldo.modoMssql === 'diferencial' ? ' · MSSQL · Diferencial' : ' · MSSQL')}
         {respaldo.comprimir && ' · ZIP'}
         {!respaldo.habilitado && ' · Deshabilitada'}
         {ejecutando && (
           <span className="indicador-ejecucion">
-            <span className="indicador-ejecucion__punto" aria-hidden="true" />
+            <span className="indicador-ejecucion__spinner" aria-hidden="true" />
             Ejecutando copia…
           </span>
         )}

@@ -2,7 +2,10 @@ import { ipcMain } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels';
 import type { ResultadoIpc } from '../../shared/types/api.types';
 import type {
+  ConexionMssql,
   EjecucionRespaldo,
+  InventarioBak,
+  ModoRespaldoMssql,
   NuevoRespaldo,
   RespaldoConfigurado,
   TipoRespaldo,
@@ -14,8 +17,10 @@ import {
   establecerActivoRespaldo,
   listarHistorialRespaldo,
   listarRespaldos,
+  obtenerRespaldo,
 } from '../repositories/respaldos-local.repository';
 import { ejecutarRespaldoAhora } from '../services/respaldo-ejecucion.service';
+import { inventariarArchivosBak } from '../services/respaldo-mssql.service';
 import { validarRemitente } from './remitente';
 
 const MAX_NOMBRE = 80;
@@ -93,6 +98,31 @@ function validarTipo(valor: unknown): TipoRespaldo {
   return valor;
 }
 
+function validarModoMssql(valor: unknown): ModoRespaldoMssql {
+  // Compatibilidad con formularios anteriores a los backups diferenciales.
+  if (valor === undefined || valor === null) {
+    return 'completo';
+  }
+
+  if (valor !== 'completo' && valor !== 'diferencial') {
+    throw new Error('El modo de backup MSSQL debe ser "completo" o "diferencial".');
+  }
+
+  return valor;
+}
+
+function validarFullCadaDias(valor: unknown): number {
+  if (valor === undefined || valor === null) {
+    return 7;
+  }
+
+  if (typeof valor !== 'number' || !Number.isInteger(valor) || valor < 1 || valor > 365) {
+    throw new Error('La antigüedad máxima del full debe ser un entero entre 1 y 365 días.');
+  }
+
+  return valor;
+}
+
 // Las tareas MSSQL guardan en "origen" un arreglo JSON con las bases elegidas.
 function validarBasesDatos(valor: unknown): string {
   if (typeof valor !== 'string' || valor.length === 0 || valor.length > 8000) {
@@ -130,6 +160,56 @@ function validarBasesDatos(valor: unknown): string {
   return JSON.stringify(Array.from(new Set(nombres)));
 }
 
+function validarConexionMssql(valor: unknown): ConexionMssql | null {
+  if (valor === null || valor === undefined) {
+    return null;
+  }
+
+  if (typeof valor !== 'object') {
+    throw new Error('La configuración de SQL Server no es válida.');
+  }
+
+  const registro = valor as Record<string, unknown>;
+  const servidor = validarTexto(registro.servidor, 'servidor', 200);
+  const usuario = validarTexto(registro.usuario, 'usuario', 200);
+  const puerto = registro.puerto;
+
+  if (!servidor) {
+    throw new Error('El servidor de SQL Server es obligatorio.');
+  }
+
+  if (!usuario) {
+    throw new Error('El usuario de SQL Server es obligatorio.');
+  }
+
+  if (typeof puerto !== 'number' || !Number.isInteger(puerto) || puerto < 1 || puerto > 65_535) {
+    throw new Error('El puerto debe ser un número entero entre 1 y 65535.');
+  }
+
+  if (typeof registro.contrasena !== 'string' || registro.contrasena.length > 500) {
+    throw new Error('La contraseña de SQL Server no es válida.');
+  }
+
+  if (typeof registro.cifrado !== 'boolean' || typeof registro.confiarCertificado !== 'boolean') {
+    throw new Error('Las opciones de conexión de SQL Server no son válidas.');
+  }
+
+  if (typeof registro.esRemoto !== 'boolean') {
+    throw new Error('Indica si el servidor SQL es remoto o local.');
+  }
+
+  return {
+    servidor,
+    puerto,
+    baseDatos: validarTexto(registro.baseDatos, 'base de datos', 128) || 'master',
+    usuario,
+    contrasena: registro.contrasena,
+    cifrado: registro.cifrado,
+    confiarCertificado: registro.confiarCertificado,
+    esRemoto: registro.esRemoto,
+  };
+}
+
 function validarNuevoRespaldo(datos: unknown): NuevoRespaldo {
   if (typeof datos !== 'object' || datos === null) {
     throw new Error('Los datos de la copia no son válidos.');
@@ -137,6 +217,11 @@ function validarNuevoRespaldo(datos: unknown): NuevoRespaldo {
 
   const registro = datos as Record<string, unknown>;
   const tipo = validarTipo(registro.tipo);
+  const conexionMssql = validarConexionMssql(registro.conexionMssql);
+
+  if (tipo === 'mssql' && !conexionMssql) {
+    throw new Error('Configura las credenciales de SQL Server para esta tarea.');
+  }
 
   return {
     nombre: validarTexto(registro.nombre, 'nombre', MAX_NOMBRE),
@@ -145,6 +230,7 @@ function validarNuevoRespaldo(datos: unknown): NuevoRespaldo {
       tipo === 'mssql'
         ? validarBasesDatos(registro.origen)
         : validarTexto(registro.origen, 'origen', MAX_RUTA),
+    conexionMssql: tipo === 'mssql' ? conexionMssql : null,
     destino: validarTexto(registro.destino, 'destino', MAX_RUTA),
     frecuenciaMinutos: validarFrecuencia(registro.frecuenciaMinutos),
     horaEjecucion: validarHora(registro.horaEjecucion),
@@ -152,6 +238,17 @@ function validarNuevoRespaldo(datos: unknown): NuevoRespaldo {
     copiaConFecha: validarBooleano(registro.copiaConFecha, 'copiaConFecha'),
     // Un respaldo de base de datos ya se entrega como .bak en el servidor.
     comprimir: tipo === 'mssql' ? false : validarBooleano(registro.comprimir, 'comprimir'),
+    modoMssql: tipo === 'mssql' ? validarModoMssql(registro.modoMssql) : 'completo',
+    fullCadaDias: tipo === 'mssql' ? validarFullCadaDias(registro.fullCadaDias) : 7,
+    // Compatibilidad: las tareas anteriores no enviaban estas opciones.
+    comprimirBak:
+      tipo === 'mssql' && registro.comprimirBak !== undefined
+        ? validarBooleano(registro.comprimirBak, 'comprimirBak')
+        : false,
+    verificarBak:
+      tipo === 'mssql' && registro.verificarBak !== undefined
+        ? validarBooleano(registro.verificarBak, 'verificarBak')
+        : false,
   };
 }
 
@@ -231,6 +328,28 @@ export function registrarIpcRespaldos(): void {
       try {
         validarRemitente(evento);
         return { ok: true, datos: listarHistorialRespaldo(validarId(id)) };
+      } catch (error) {
+        return { ok: false, error: mensajeError(error) };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.RESPALDOS_INVENTARIO_BAK,
+    async (evento, id: unknown): Promise<ResultadoIpc<InventarioBak>> => {
+      try {
+        validarRemitente(evento);
+        const respaldo = obtenerRespaldo(validarId(id));
+
+        if (!respaldo) {
+          throw new Error('La copia indicada no existe.');
+        }
+
+        if (respaldo.tipo !== 'mssql') {
+          throw new Error('El inventario de .bak solo aplica a tareas MSSQL.');
+        }
+
+        return { ok: true, datos: await inventariarArchivosBak(respaldo) };
       } catch (error) {
         return { ok: false, error: mensajeError(error) };
       }

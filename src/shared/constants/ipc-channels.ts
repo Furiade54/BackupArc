@@ -11,9 +11,8 @@ export const IPC_CHANNELS = {
   VENTANA_ESTADO: 'ventana:estado',
   VENTANA_ESTADO_CAMBIADA: 'ventana:estado-cambiada',
   DIALOGO_SELECCIONAR_CARPETA: 'dialogo:seleccionar-carpeta',
+  DIALOGO_SELECCIONAR_ARCHIVO: 'dialogo:seleccionar-archivo',
   SISTEMA_ABRIR_RUTA: 'sistema:abrir-ruta',
-  MSSQL_OBTENER: 'mssql:obtener',
-  MSSQL_GUARDAR: 'mssql:guardar',
   MSSQL_PROBAR: 'mssql:probar',
   MSSQL_BASES_DATOS: 'mssql:bases-datos',
   PREFERENCIAS_OBTENER: 'preferencias:obtener',
@@ -31,4 +30,5 @@ export const IPC_CHANNELS = {
   RESPALDOS_ELIMINAR: 'respaldos:eliminar',
   RESPALDOS_ESTABLECER_ACTIVO: 'respaldos:establecer-activo',
   RESPALDOS_HISTORIAL: 'respaldos:historial',
+  RESPALDOS_INVENTARIO_BAK: 'respaldos:inventario-bak',
 } as const;

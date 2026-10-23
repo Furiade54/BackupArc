@@ -219,13 +219,20 @@
   font-weight: 500;
 }
 
-.indicador-ejecucion__punto {
-  width: 6px;
-  height: 6px;
+.indicador-ejecucion__spinner {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(200, 234, 251, 0.22);
+  border-top-color: var(--acento);
   border-radius: 50%;
-  background: var(--acento);
-  box-shadow: 0 0 8px rgba(200, 234, 251, 0.9);
-  animation: punto-estado-ejecutando 1.05s ease-in-out infinite;
+  animation: indicador-ejecucion-girar 0.75s linear infinite;
+}
+
+@keyframes indicador-ejecucion-girar {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .enlace-accion {
@@ -303,7 +310,7 @@
   }
 
   .punto-estado--ejecutando,
-  .indicador-ejecucion__punto,
+  .indicador-ejecucion__spinner,
   .barra-ciclo--ejecutando .barra-ciclo__relleno {
     animation: none;
   }
