@@ -3,7 +3,10 @@ import path from 'node:path';
 import { ZipArchive, type ArchiverError } from 'archiver';
 import { BrowserWindow } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels';
-import type { RespaldoConfigurado } from '../../shared/types/respaldo.types';
+import type {
+  NuevoResultadoBaseRespaldo,
+  RespaldoConfigurado,
+} from '../../shared/types/respaldo.types';
 import {
   actualizarEstadoRespaldo,
   calcularSiguienteEjecucion,
@@ -11,10 +14,11 @@ import {
   normalizarProximasEjecuciones,
   obtenerRespaldo,
   registrarEjecucionRespaldo,
+  registrarResultadosBase,
 } from '../repositories/respaldos-local.repository';
 import { logger } from '../utils/logger';
 import { marcaTiempo, slug } from '../utils/nombres-respaldo';
-import { respaldarBasesDatosMssql } from './respaldo-mssql.service';
+import { crearRunId, respaldarBasesDatosMssql } from './respaldo-mssql.service';
 
 const INTERVALO_COMPROBACION_MS = 60_000;
 const RETRASO_INICIAL_MS = 10_000;
@@ -216,6 +220,39 @@ function notificarCambioEjecucion(id: number, enEjecucion: boolean): void {
   }
 }
 
+function resumirResultadosMssql(resultados: NuevoResultadoBaseRespaldo[]): string {
+  const exitosos = resultados.filter((resultado) => resultado.estado !== 'error');
+  const completos = exitosos.filter((resultado) => resultado.tipoEjecutado === 'completo').length;
+  const diferenciales = exitosos.length - completos;
+  const advertencias = exitosos.filter((resultado) => resultado.estado === 'advertencia');
+  const errores = resultados.filter((resultado) => resultado.estado === 'error');
+  const partes: string[] = [];
+
+  if (completos > 0) {
+    partes.push(`${completos} full`);
+  }
+
+  if (diferenciales > 0) {
+    partes.push(`${diferenciales} diferencial${diferenciales === 1 ? '' : 'es'}`);
+  }
+
+  let resumen = partes.length > 0 ? partes.join(' · ') : 'Sin bases respaldadas';
+
+  if (advertencias.length > 0) {
+    resumen += ` · ${advertencias.length} con advertencia`;
+  }
+
+  if (errores.length > 0) {
+    const detalle = errores
+      .map((error) => `${error.baseDatos}: ${error.detalle ?? 'sin detalle'}`)
+      .join(' | ');
+
+    resumen += ` · ${errores.length} con error (${detalle})`;
+  }
+
+  return resumen;
+}
+
 async function ejecutarRespaldoInterno(respaldo: RespaldoConfigurado): Promise<void> {
   if (enEjecucion.has(respaldo.id)) {
     throw new Error('La copia ya se está ejecutando.');
@@ -226,27 +263,53 @@ async function ejecutarRespaldoInterno(respaldo: RespaldoConfigurado): Promise<v
 
   const inicio = new Date();
   const proximaEjecucion = calcularSiguienteEjecucion(inicio, respaldo.frecuenciaMinutos);
+  // En MSSQL la ejecución y sus resultados se guardan antes de propagar el
+  // error resumido, para no duplicar el registro en el historial.
+  let ejecucionRegistrada = false;
 
   try {
-    const rutaCopia =
-      respaldo.tipo === 'mssql'
-        ? await respaldarBasesDatosMssql(respaldo, inicio)
-        : respaldo.comprimir
-          ? await comprimirOrigen(respaldo, inicio)
-          : await copiarOrigen(respaldo, inicio);
+    if (respaldo.tipo === 'mssql') {
+      const runId = crearRunId();
+      const { resultados, tipoResumen } = await respaldarBasesDatosMssql(respaldo, inicio, runId);
+      const errores = resultados.filter((resultado) => resultado.estado === 'error');
+      const advertencias = resultados.filter((resultado) => resultado.estado === 'advertencia');
+      const estado = errores.length > 0 ? 'error' : advertencias.length > 0 ? 'advertencia' : 'ok';
+      const detalle = resumirResultadosMssql(resultados);
+
+      const ejecucionId = registrarEjecucionRespaldo(
+        respaldo.id,
+        estado,
+        detalle,
+        inicio.toISOString(),
+        { tipo: tipoResumen, runId },
+      );
+      registrarResultadosBase(ejecucionId, resultados);
+      actualizarEstadoRespaldo(respaldo.id, estado, inicio.toISOString(), proximaEjecucion);
+      ejecucionRegistrada = true;
+
+      logger.info(`Copia MSSQL "${respaldo.nombre}" finalizada`, detalle);
+
+      if (errores.length > 0) {
+        throw new Error(detalle);
+      }
+
+      return;
+    }
+
+    const rutaCopia = respaldo.comprimir
+      ? await comprimirOrigen(respaldo, inicio)
+      : await copiarOrigen(respaldo, inicio);
 
     // La retención solo aplica a los archivos que copia la propia aplicación;
     // los .bak viven en el servidor SQL y se administran allí.
-    if (respaldo.tipo === 'archivos') {
-      try {
-        await aplicarRetencion(
-          path.resolve(respaldo.destino),
-          slug(respaldo.nombre),
-          respaldo.retencionDias,
-        );
-      } catch (error) {
-        logger.warn(`No se pudo limpiar el destino de "${respaldo.nombre}"`, error);
-      }
+    try {
+      await aplicarRetencion(
+        path.resolve(respaldo.destino),
+        slug(respaldo.nombre),
+        respaldo.retencionDias,
+      );
+    } catch (error) {
+      logger.warn(`No se pudo limpiar el destino de "${respaldo.nombre}"`, error);
     }
 
     registrarEjecucionRespaldo(
@@ -258,6 +321,10 @@ async function ejecutarRespaldoInterno(respaldo: RespaldoConfigurado): Promise<v
     actualizarEstadoRespaldo(respaldo.id, 'ok', inicio.toISOString(), proximaEjecucion);
     logger.info(`Copia "${respaldo.nombre}" completada`, rutaCopia);
   } catch (error) {
+    if (ejecucionRegistrada) {
+      throw error;
+    }
+
     const mensaje = error instanceof Error ? error.message : String(error);
 
     logger.error(`Falló la copia "${respaldo.nombre}"`, error);

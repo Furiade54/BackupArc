@@ -5,12 +5,11 @@ import type {
   ConfiguracionMssql,
   ResultadoIpc,
   ResultadoPruebaMssql,
-  ResumenConfiguracionMssql,
 } from '../../shared/types/api.types';
+import { obtenerConexionMssqlRespaldo } from '../repositories/respaldos-local.repository';
 import {
-  guardarConfiguracionMssql,
+  leerConfiguracionMssql,
   listarBasesDatos,
-  obtenerResumenConfiguracionMssql,
   probarConfiguracionMssql,
 } from '../services/database.service';
 import { validarRemitente } from './remitente';
@@ -70,6 +69,10 @@ function validarConfiguracion(datos: unknown): ConfiguracionMssql {
     throw new Error('La confianza del certificado debe ser verdadera o falsa.');
   }
 
+  if (typeof registro.esRemoto !== 'boolean') {
+    throw new Error('Indica si el servidor SQL es remoto o local.');
+  }
+
   return {
     servidor,
     puerto,
@@ -78,37 +81,43 @@ function validarConfiguracion(datos: unknown): ConfiguracionMssql {
     contrasena: registro.contrasena,
     cifrado: registro.cifrado,
     confiarCertificado: registro.confiarCertificado,
+    esRemoto: registro.esRemoto,
   };
 }
 
-export function registrarIpcMssql(): void {
-  ipcMain.handle(IPC_CHANNELS.MSSQL_OBTENER, (evento): ResultadoIpc<ResumenConfiguracionMssql> => {
-    try {
-      validarRemitente(evento);
-      return { ok: true, datos: obtenerResumenConfiguracionMssql() };
-    } catch (error) {
-      return { ok: false, error: mensajeError(error) };
+// Si el formulario no repite la contraseña, se usa la guardada en la tarea
+// (o la global de versiones anteriores).
+function completarContrasena(datos: ConfiguracionMssql, respaldoId: unknown): ConfiguracionMssql {
+  if (datos.contrasena) {
+    return datos;
+  }
+
+  if (typeof respaldoId === 'number' && Number.isInteger(respaldoId) && respaldoId > 0) {
+    const guardada = obtenerConexionMssqlRespaldo(respaldoId)?.contrasena;
+
+    if (guardada) {
+      return { ...datos, contrasena: guardada };
     }
-  });
+  }
 
-  ipcMain.handle(
-    IPC_CHANNELS.MSSQL_GUARDAR,
-    async (evento, datos: unknown): Promise<ResultadoIpc<ResumenConfiguracionMssql>> => {
-      try {
-        validarRemitente(evento);
-        return { ok: true, datos: await guardarConfiguracionMssql(validarConfiguracion(datos)) };
-      } catch (error) {
-        return { ok: false, error: mensajeError(error) };
-      }
-    },
-  );
+  const global = leerConfiguracionMssql().contrasena;
 
+  return global ? { ...datos, contrasena: global } : datos;
+}
+
+export function registrarIpcMssql(): void {
   ipcMain.handle(
     IPC_CHANNELS.MSSQL_BASES_DATOS,
-    async (evento): Promise<ResultadoIpc<BaseDatosMssql[]>> => {
+    async (evento, datos: unknown, respaldoId: unknown): Promise<ResultadoIpc<BaseDatosMssql[]>> => {
       try {
         validarRemitente(evento);
-        return { ok: true, datos: await listarBasesDatos() };
+
+        const conexion =
+          datos === null || datos === undefined
+            ? null
+            : completarContrasena(validarConfiguracion(datos), respaldoId);
+
+        return { ok: true, datos: await listarBasesDatos(conexion) };
       } catch (error) {
         return { ok: false, error: mensajeError(error) };
       }
@@ -117,10 +126,16 @@ export function registrarIpcMssql(): void {
 
   ipcMain.handle(
     IPC_CHANNELS.MSSQL_PROBAR,
-    async (evento, datos: unknown): Promise<ResultadoIpc<ResultadoPruebaMssql>> => {
+    async (evento, datos: unknown, respaldoId: unknown): Promise<ResultadoIpc<ResultadoPruebaMssql>> => {
       try {
         validarRemitente(evento);
-        return { ok: true, datos: await probarConfiguracionMssql(validarConfiguracion(datos)) };
+
+        return {
+          ok: true,
+          datos: await probarConfiguracionMssql(
+            completarContrasena(validarConfiguracion(datos), respaldoId),
+          ),
+        };
       } catch (error) {
         return { ok: false, error: mensajeError(error) };
       }

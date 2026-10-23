@@ -8,7 +8,8 @@ import type {
   ResumenConfiguracionMssql,
 } from '../../shared/types/api.types';
 import { logger } from '../utils/logger';
-import { guardarPreferencia, obtenerPreferenciaConDefecto } from './local-database.service';
+import { pareceServidorRemoto } from '../../shared/utils/servidor-mssql';
+import { obtenerPreferenciaConDefecto } from './local-database.service';
 
 const CLAVES = {
   servidor: 'mssql_servidor',
@@ -22,7 +23,7 @@ const CLAVES = {
 
 let poolPromise: Promise<sql.ConnectionPool> | null = null;
 
-function codificarContrasena(valor: string): string {
+export function codificarContrasena(valor: string): string {
   if (!valor) {
     return '';
   }
@@ -32,7 +33,7 @@ function codificarContrasena(valor: string): string {
     : `base64:${Buffer.from(valor, 'utf8').toString('base64')}`;
 }
 
-function decodificarContrasena(guardado: string): string {
+export function decodificarContrasena(guardado: string): string {
   if (!guardado) {
     return '';
   }
@@ -84,16 +85,64 @@ export function leerConfiguracionMssql(): ConfiguracionMssql {
         CLAVES.confiarCertificado,
         process.env.DB_TRUST_CERTIFICATE === 'false' ? '0' : '1',
       ) === '1',
+    esRemoto: pareceServidorRemoto(servidor),
   };
 }
 
-export function obtenerResumenConfiguracionMssql(): ResumenConfiguracionMssql {
-  const { contrasena, ...resto } = leerConfiguracionMssql();
+// La conexión de cada tarea MSSQL se guarda como JSON con la contraseña cifrada.
+export function cifrarConexionMssql(datos: ConfiguracionMssql): string {
+  return JSON.stringify({
+    ...datos,
+    servidor: datos.servidor.trim(),
+    baseDatos: datos.baseDatos.trim() || 'master',
+    usuario: datos.usuario.trim(),
+    contrasena: codificarContrasena(datos.contrasena),
+  });
+}
+
+export function leerConexionMssql(guardado: string | null): ConfiguracionMssql | null {
+  if (!guardado) {
+    return null;
+  }
+
+  try {
+    const datos = JSON.parse(guardado) as Partial<Record<keyof ConfiguracionMssql, unknown>>;
+    const puertoLeido = typeof datos.puerto === 'number' ? datos.puerto : 1433;
+    const baseDatos = typeof datos.baseDatos === 'string' ? datos.baseDatos.trim() : '';
+    const servidor = typeof datos.servidor === 'string' ? datos.servidor : '';
+
+    return {
+      servidor,
+      puerto: Number.isInteger(puertoLeido) && puertoLeido > 0 ? puertoLeido : 1433,
+      baseDatos: baseDatos || 'master',
+      usuario: typeof datos.usuario === 'string' ? datos.usuario : '',
+      contrasena:
+        typeof datos.contrasena === 'string' ? decodificarContrasena(datos.contrasena) : '',
+      cifrado: datos.cifrado === true,
+      confiarCertificado: datos.confiarCertificado !== false,
+      // Tareas guardadas antes de este campo: se deduce a partir del host.
+      esRemoto:
+        typeof datos.esRemoto === 'boolean' ? datos.esRemoto : pareceServidorRemoto(servidor),
+    };
+  } catch (error) {
+    logger.warn('No se pudo leer la conexión MSSQL guardada en la tarea', error);
+    return null;
+  }
+}
+
+export function resumirConexionMssql(guardado: string | null): ResumenConfiguracionMssql | null {
+  const datos = leerConexionMssql(guardado);
+
+  if (!datos) {
+    return null;
+  }
+
+  const { contrasena, ...resto } = datos;
 
   return { ...resto, tieneContrasena: contrasena.length > 0 };
 }
 
-function configuracionCompleta(configuracion: ConfiguracionMssql): boolean {
+export function estaConfiguracionCompleta(configuracion: ConfiguracionMssql): boolean {
   return (
     configuracion.servidor.trim().length > 0 &&
     configuracion.usuario.trim().length > 0 &&
@@ -101,7 +150,7 @@ function configuracionCompleta(configuracion: ConfiguracionMssql): boolean {
   );
 }
 
-function aConfiguracionSql(configuracion: ConfiguracionMssql): sql.config {
+export function configuracionSqlPara(configuracion: ConfiguracionMssql): sql.config {
   return {
     server: configuracion.servidor,
     database: configuracion.baseDatos || 'master',
@@ -125,50 +174,20 @@ function aConfiguracionSql(configuracion: ConfiguracionMssql): sql.config {
 function construirConfiguracion(): sql.config | null {
   const configuracion = leerConfiguracionMssql();
 
-  return configuracionCompleta(configuracion) ? aConfiguracionSql(configuracion) : null;
-}
-
-export async function guardarConfiguracionMssql(
-  datos: ConfiguracionMssql,
-): Promise<ResumenConfiguracionMssql> {
-  const anterior = leerConfiguracionMssql();
-
-  guardarPreferencia(CLAVES.servidor, datos.servidor.trim());
-  guardarPreferencia(CLAVES.puerto, String(datos.puerto));
-  guardarPreferencia(CLAVES.baseDatos, datos.baseDatos.trim() || 'master');
-  guardarPreferencia(CLAVES.usuario, datos.usuario.trim());
-  guardarPreferencia(CLAVES.cifrado, datos.cifrado ? '1' : '0');
-  guardarPreferencia(CLAVES.confiarCertificado, datos.confiarCertificado ? '1' : '0');
-
-  // Una contraseña vacía conserva la que ya estaba guardada.
-  if (datos.contrasena.length > 0) {
-    guardarPreferencia(CLAVES.contrasena, codificarContrasena(datos.contrasena));
-  } else if (anterior.contrasena.length > 0) {
-    guardarPreferencia(CLAVES.contrasena, codificarContrasena(anterior.contrasena));
-  }
-
-  await cerrarConexion();
-
-  return obtenerResumenConfiguracionMssql();
+  return estaConfiguracionCompleta(configuracion) ? configuracionSqlPara(configuracion) : null;
 }
 
 export async function probarConfiguracionMssql(
   datos: ConfiguracionMssql,
 ): Promise<ResultadoPruebaMssql> {
-  const anterior = leerConfiguracionMssql();
-  const conContrasena: ConfiguracionMssql = {
-    ...datos,
-    contrasena: datos.contrasena.length > 0 ? datos.contrasena : anterior.contrasena,
-  };
-
-  if (!configuracionCompleta(conContrasena)) {
+  if (!estaConfiguracionCompleta(datos)) {
     return {
       ok: false,
       mensaje: 'Completa el servidor, el usuario y la contraseña para probar la conexión.',
     };
   }
 
-  const pool = new sql.ConnectionPool(aConfiguracionSql(conContrasena));
+  const pool = new sql.ConnectionPool(configuracionSqlPara(datos));
 
   try {
     await pool.connect();
@@ -189,16 +208,37 @@ export async function probarConfiguracionMssql(
 }
 
 // Temperatura y snapshots no se pueden respaldar con BACKUP DATABASE.
-export async function listarBasesDatos(): Promise<BaseDatosMssql[]> {
-  const pool = await obtenerPool();
-  const resultado = await pool.request().query<{ name: string; state_desc: string }>(`
-    SELECT name, state_desc
-    FROM sys.databases
-    WHERE name <> 'tempdb' AND source_database_id IS NULL
-    ORDER BY name ASC
-  `);
+// Sin conexión explícita usa la configuración global (tareas antiguas).
+export async function listarBasesDatos(
+  conexion?: ConfiguracionMssql | null,
+): Promise<BaseDatosMssql[]> {
+  if (conexion && !estaConfiguracionCompleta(conexion)) {
+    throw new Error('Completa las credenciales de SQL Server para explorar las bases de datos.');
+  }
 
-  return resultado.recordset.map((fila) => ({ nombre: fila.name, estado: fila.state_desc }));
+  const pool = conexion
+    ? new sql.ConnectionPool(configuracionSqlPara(conexion))
+    : await obtenerPool();
+  const propio = Boolean(conexion);
+
+  try {
+    if (propio) {
+      await pool.connect();
+    }
+
+    const resultado = await pool.request().query<{ name: string; state_desc: string }>(`
+      SELECT name, state_desc
+      FROM sys.databases
+      WHERE name <> 'tempdb' AND source_database_id IS NULL
+      ORDER BY name ASC
+    `);
+
+    return resultado.recordset.map((fila) => ({ nombre: fila.name, estado: fila.state_desc }));
+  } finally {
+    if (propio) {
+      await pool.close().catch(() => undefined);
+    }
+  }
 }
 
 export async function obtenerPool(): Promise<sql.ConnectionPool> {

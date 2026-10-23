@@ -1,10 +1,24 @@
 import type {
+  CompresionBak,
+  ConexionMssql,
   EjecucionRespaldo,
   EstadoRespaldo,
+  ModoRespaldoMssql,
   NuevoRespaldo,
+  NuevoResultadoBaseRespaldo,
+  ResultadoBaseRespaldo,
   RespaldoConfigurado,
+  ResumenConexionMssql,
+  TipoEjecutadoMssql,
   TipoRespaldo,
 } from '../../shared/types/respaldo.types';
+import {
+  cifrarConexionMssql,
+  estaConfiguracionCompleta,
+  leerConfiguracionMssql,
+  leerConexionMssql,
+  resumirConexionMssql,
+} from '../services/database.service';
 import { obtenerBaseDatosLocal } from '../services/local-database.service';
 
 interface FilaRespaldo {
@@ -12,14 +26,20 @@ interface FilaRespaldo {
   nombre: string;
   tipo: string;
   origen: string;
+  mssql_conexion: string | null;
   destino: string;
   frecuencia_minutos: number;
   hora_ejecucion: string;
   retencion_dias: number;
   copia_con_fecha: number;
   comprimir: number;
+  modo_mssql: string;
+  full_cada_dias: number;
+  comprimir_bak: number;
+  verificar_bak: number;
   habilitado: number;
   ultima_ejecucion: string | null;
+  fallo_desde: string | null;
   proxima_ejecucion: string;
   ultimo_estado: string;
   creado_en: string;
@@ -28,6 +48,24 @@ interface FilaRespaldo {
 interface FilaEjecucion {
   id: number;
   fecha: string;
+  estado: string;
+  detalle: string | null;
+  tipo: string | null;
+  run_id: string | null;
+}
+
+interface FilaResultadoBase {
+  id: number;
+  ejecucion_id: number;
+  base_datos: string;
+  tipo_ejecutado: string;
+  archivo: string | null;
+  base_archivo: string | null;
+  base_guid: string | null;
+  base_lsn: string | null;
+  base_fecha: string | null;
+  tamano_bytes: number | null;
+  compresion: string | null;
   estado: string;
   detalle: string | null;
 }
@@ -40,20 +78,65 @@ function esTipoRespaldo(valor: string): valor is TipoRespaldo {
   return valor === 'archivos' || valor === 'mssql';
 }
 
+function esModoMssql(valor: string): valor is ModoRespaldoMssql {
+  return valor === 'completo' || valor === 'diferencial';
+}
+
+function esTipoEjecutado(valor: string): valor is TipoEjecutadoMssql {
+  return valor === 'completo' || valor === 'diferencial';
+}
+
+function esCompresion(valor: string | null): CompresionBak {
+  return valor === 'aplicada' || valor === 'no aplicada' ? valor : 'desconocido';
+}
+
+// Las tareas MSSQL antiguas no guardaban su conexión: se muestra la global,
+// que es la que han estado usando, para no perderla al editarlas.
+function conexionDeFila(fila: FilaRespaldo): ResumenConexionMssql | null {
+  const propia = resumirConexionMssql(fila.mssql_conexion);
+
+  if (propia || fila.tipo !== 'mssql') {
+    return propia;
+  }
+
+  const global = leerConfiguracionMssql();
+
+  if (!estaConfiguracionCompleta(global)) {
+    return null;
+  }
+
+  return {
+    servidor: global.servidor,
+    puerto: global.puerto,
+    baseDatos: global.baseDatos,
+    usuario: global.usuario,
+    cifrado: global.cifrado,
+    confiarCertificado: global.confiarCertificado,
+    esRemoto: global.esRemoto,
+    tieneContrasena: true,
+  };
+}
+
 function mapearRespaldo(fila: FilaRespaldo): RespaldoConfigurado {
   return {
     id: fila.id,
     nombre: fila.nombre,
     tipo: esTipoRespaldo(fila.tipo) ? fila.tipo : 'archivos',
     origen: fila.origen,
+    conexionMssql: conexionDeFila(fila),
     destino: fila.destino,
     frecuenciaMinutos: fila.frecuencia_minutos,
     horaEjecucion: fila.hora_ejecucion,
     retencionDias: fila.retencion_dias,
     copiaConFecha: fila.copia_con_fecha === 1,
     comprimir: fila.comprimir === 1,
+    modoMssql: esModoMssql(fila.modo_mssql) ? fila.modo_mssql : 'completo',
+    fullCadaDias: fila.full_cada_dias,
+    comprimirBak: fila.comprimir_bak === 1,
+    verificarBak: fila.verificar_bak === 1,
     habilitado: fila.habilitado === 1,
     ultimaEjecucion: fila.ultima_ejecucion,
+    falloDesde: fila.fallo_desde,
     proximaEjecucion: fila.proxima_ejecucion,
     ultimoEstado: esEstadoRespaldo(fila.ultimo_estado) ? fila.ultimo_estado : 'pendiente',
     creadoEn: fila.creado_en,
@@ -152,11 +235,16 @@ export function crearRespaldo(datos: NuevoRespaldo): RespaldoConfigurado {
         retencion_dias,
         copia_con_fecha,
         comprimir,
+        modo_mssql,
+        full_cada_dias,
+        comprimir_bak,
+        verificar_bak,
+        mssql_conexion,
         ultima_ejecucion,
         proxima_ejecucion,
         ultimo_estado,
         creado_en
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'pendiente', ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'pendiente', ?)
     `)
     .run(
       datos.nombre,
@@ -168,6 +256,11 @@ export function crearRespaldo(datos: NuevoRespaldo): RespaldoConfigurado {
       datos.retencionDias,
       datos.copiaConFecha ? 1 : 0,
       datos.comprimir ? 1 : 0,
+      datos.modoMssql,
+      datos.fullCadaDias,
+      datos.comprimirBak ? 1 : 0,
+      datos.verificarBak ? 1 : 0,
+      datos.conexionMssql ? cifrarConexionMssql(datos.conexionMssql) : null,
       proximaEjecucion,
       creadoEn.toISOString(),
     );
@@ -186,6 +279,21 @@ export function crearRespaldo(datos: NuevoRespaldo): RespaldoConfigurado {
 export function actualizarRespaldo(id: number, datos: NuevoRespaldo): RespaldoConfigurado {
   const baseDatos = obtenerBaseDatosLocal();
   const proximaEjecucion = calcularProximaEjecucion(datos.horaEjecucion, datos.frecuenciaMinutos, new Date());
+  const anterior = baseDatos
+    .prepare('SELECT mssql_conexion FROM respaldos WHERE id = ?')
+    .get(id) as { mssql_conexion: string | null } | undefined;
+
+  // Una contraseña vacía conserva la de la tarea o, en tareas antiguas, la global.
+  const conexionMssql = datos.conexionMssql
+    ? cifrarConexionMssql({
+        ...datos.conexionMssql,
+        contrasena:
+          datos.conexionMssql.contrasena ||
+          leerConexionMssql(anterior?.mssql_conexion ?? null)?.contrasena ||
+          leerConfiguracionMssql().contrasena ||
+          '',
+      })
+    : null;
 
   const resultado = baseDatos
     .prepare(`
@@ -193,12 +301,17 @@ export function actualizarRespaldo(id: number, datos: NuevoRespaldo): RespaldoCo
       SET nombre = ?,
           tipo = ?,
           origen = ?,
+          mssql_conexion = ?,
           destino = ?,
           frecuencia_minutos = ?,
           hora_ejecucion = ?,
           retencion_dias = ?,
           copia_con_fecha = ?,
           comprimir = ?,
+          modo_mssql = ?,
+          full_cada_dias = ?,
+          comprimir_bak = ?,
+          verificar_bak = ?,
           proxima_ejecucion = ?
       WHERE id = ?
     `)
@@ -206,12 +319,17 @@ export function actualizarRespaldo(id: number, datos: NuevoRespaldo): RespaldoCo
       datos.nombre,
       datos.tipo,
       datos.origen,
+      conexionMssql,
       datos.destino,
       datos.frecuenciaMinutos,
       datos.horaEjecucion,
       datos.retencionDias,
       datos.copiaConFecha ? 1 : 0,
       datos.comprimir ? 1 : 0,
+      datos.modoMssql,
+      datos.fullCadaDias,
+      datos.comprimirBak ? 1 : 0,
+      datos.verificarBak ? 1 : 0,
       proximaEjecucion,
       id,
     );
@@ -227,6 +345,15 @@ export function actualizarRespaldo(id: number, datos: NuevoRespaldo): RespaldoCo
   }
 
   return mapearRespaldo(fila);
+}
+
+// Devuelve la conexión completa (con contraseña) para ejecutar una tarea MSSQL.
+export function obtenerConexionMssqlRespaldo(id: number): ConexionMssql | null {
+  const fila = obtenerBaseDatosLocal()
+    .prepare('SELECT mssql_conexion FROM respaldos WHERE id = ?')
+    .get(id) as { mssql_conexion: string | null } | undefined;
+
+  return fila ? leerConexionMssql(fila.mssql_conexion) : null;
 }
 
 export function obtenerRespaldo(id: number): RespaldoConfigurado | null {
@@ -254,13 +381,87 @@ export function registrarEjecucionRespaldo(
   estado: EstadoRespaldo,
   detalle: string | null,
   fecha: string,
-): void {
-  obtenerBaseDatosLocal()
+  opciones: { tipo?: string | null; runId?: string | null } = {},
+): number {
+  const resultado = obtenerBaseDatosLocal()
     .prepare(`
-      INSERT INTO ejecuciones_respaldo (respaldo_id, fecha, estado, detalle)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO ejecuciones_respaldo (respaldo_id, fecha, estado, detalle, tipo, run_id)
+      VALUES (?, ?, ?, ?, ?, ?)
     `)
-    .run(respaldoId, fecha, estado, detalle);
+    .run(
+      respaldoId,
+      fecha,
+      estado,
+      detalle,
+      opciones.tipo ?? null,
+      opciones.runId ?? null,
+    );
+
+  return Number(resultado.lastInsertRowid);
+}
+
+// Trazabilidad por base: tipo real ejecutado, archivo generado y full usado como base.
+export function registrarResultadosBase(
+  ejecucionId: number,
+  resultados: NuevoResultadoBaseRespaldo[],
+): void {
+  const insertar = obtenerBaseDatosLocal().prepare(`
+    INSERT INTO resultados_respaldo (
+      ejecucion_id,
+      base_datos,
+      tipo_ejecutado,
+      archivo,
+      base_archivo,
+      base_guid,
+      base_lsn,
+      base_fecha,
+      tamano_bytes,
+      compresion,
+      estado,
+      detalle
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const resultado of resultados) {
+    insertar.run(
+      ejecucionId,
+      resultado.baseDatos,
+      resultado.tipoEjecutado,
+      resultado.archivo,
+      resultado.baseArchivo,
+      resultado.baseGuid,
+      resultado.baseLsn,
+      resultado.baseFecha,
+      resultado.tamanoBytes,
+      resultado.compresion,
+      resultado.estado,
+      resultado.detalle,
+    );
+  }
+}
+
+// Primera falla de la racha actual, tomada del historial de la tarea.
+function calcularInicioRachaFallas(respaldoId: number): string | null {
+  const filas = obtenerBaseDatosLocal()
+    .prepare(`
+      SELECT fecha, estado
+      FROM ejecuciones_respaldo
+      WHERE respaldo_id = ?
+      ORDER BY fecha DESC
+    `)
+    .all(respaldoId) as unknown as { fecha: string; estado: string }[];
+
+  let inicio: string | null = null;
+
+  for (const fila of filas) {
+    if (fila.estado !== 'error') {
+      break;
+    }
+
+    inicio = fila.fecha;
+  }
+
+  return inicio;
 }
 
 export function actualizarEstadoRespaldo(
@@ -269,15 +470,22 @@ export function actualizarEstadoRespaldo(
   ultimaEjecucion: string,
   proximaEjecucion: string,
 ): void {
-  obtenerBaseDatosLocal()
+  const baseDatos = obtenerBaseDatosLocal();
+  // La racha se deriva siempre del historial (el registro de este intento ya
+  // está insertado), así un valor guardado por error no se queda pegado.
+  const falloDesde =
+    estado === 'error' ? (calcularInicioRachaFallas(id) ?? ultimaEjecucion) : null;
+
+  baseDatos
     .prepare(`
       UPDATE respaldos
       SET ultimo_estado = ?,
           ultima_ejecucion = ?,
+          fallo_desde = ?,
           proxima_ejecucion = ?
       WHERE id = ?
     `)
-    .run(estado, ultimaEjecucion, proximaEjecucion, id);
+    .run(estado, ultimaEjecucion, falloDesde, proximaEjecucion, id);
 }
 
 export function eliminarRespaldo(id: number): void {
@@ -310,17 +518,54 @@ export function listarHistorialRespaldo(id: number): EjecucionRespaldo[] {
 
   const filas = baseDatos
     .prepare(`
-      SELECT id, fecha, estado, detalle
+      SELECT id, fecha, estado, detalle, tipo, run_id
       FROM ejecuciones_respaldo
       WHERE respaldo_id = ?
       ORDER BY fecha DESC
     `)
     .all(id) as unknown as FilaEjecucion[];
 
+  const resultados = baseDatos
+    .prepare(`
+      SELECT r.id, r.ejecucion_id, r.base_datos, r.tipo_ejecutado, r.archivo,
+             r.base_archivo, r.base_guid, r.base_lsn, r.base_fecha,
+             r.tamano_bytes, r.compresion, r.estado, r.detalle
+      FROM resultados_respaldo r
+      JOIN ejecuciones_respaldo e ON e.id = r.ejecucion_id
+      WHERE e.respaldo_id = ?
+      ORDER BY r.id ASC
+    `)
+    .all(id) as unknown as FilaResultadoBase[];
+
+  const resultadosPorEjecucion = new Map<number, ResultadoBaseRespaldo[]>();
+
+  for (const fila of resultados) {
+    const lista = resultadosPorEjecucion.get(fila.ejecucion_id) ?? [];
+
+    lista.push({
+      id: fila.id,
+      baseDatos: fila.base_datos,
+      tipoEjecutado: esTipoEjecutado(fila.tipo_ejecutado) ? fila.tipo_ejecutado : 'completo',
+      archivo: fila.archivo,
+      baseArchivo: fila.base_archivo,
+      baseGuid: fila.base_guid,
+      baseLsn: fila.base_lsn,
+      baseFecha: fila.base_fecha,
+      tamanoBytes: fila.tamano_bytes,
+      compresion: esCompresion(fila.compresion),
+      estado: esEstadoRespaldo(fila.estado) ? fila.estado : 'pendiente',
+      detalle: fila.detalle,
+    });
+    resultadosPorEjecucion.set(fila.ejecucion_id, lista);
+  }
+
   return filas.map((fila) => ({
     id: fila.id,
     fecha: fila.fecha,
     estado: esEstadoRespaldo(fila.estado) ? fila.estado : 'pendiente',
     detalle: fila.detalle,
+    tipo: fila.tipo,
+    runId: fila.run_id,
+    resultados: resultadosPorEjecucion.get(fila.id) ?? [],
   }));
 }

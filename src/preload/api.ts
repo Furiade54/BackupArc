@@ -43,15 +43,17 @@ export const api: ApiElectron = {
   dialogos: {
     seleccionarCarpeta: (rutaInicial) =>
       ipcRenderer.invoke(IPC_CHANNELS.DIALOGO_SELECCIONAR_CARPETA, rutaInicial),
+    seleccionarArchivo: (rutaInicial) =>
+      ipcRenderer.invoke(IPC_CHANNELS.DIALOGO_SELECCIONAR_ARCHIVO, rutaInicial),
   },
   sistema: {
     abrirRuta: (ruta) => ipcRenderer.invoke(IPC_CHANNELS.SISTEMA_ABRIR_RUTA, ruta),
   },
   mssql: {
-    obtener: () => ipcRenderer.invoke(IPC_CHANNELS.MSSQL_OBTENER),
-    guardar: (datos) => ipcRenderer.invoke(IPC_CHANNELS.MSSQL_GUARDAR, datos),
-    probar: (datos) => ipcRenderer.invoke(IPC_CHANNELS.MSSQL_PROBAR, datos),
-    basesDatos: () => ipcRenderer.invoke(IPC_CHANNELS.MSSQL_BASES_DATOS),
+    probar: (datos, respaldoId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.MSSQL_PROBAR, datos, respaldoId),
+    basesDatos: (datos, respaldoId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.MSSQL_BASES_DATOS, datos, respaldoId),
   },
   preferencias: {
     obtener: (clave) => ipcRenderer.invoke(IPC_CHANNELS.PREFERENCIAS_OBTENER, clave),
@@ -97,6 +99,7 @@ export const api: ApiElectron = {
     establecerActivo: (id, habilitado) =>
       ipcRenderer.invoke(IPC_CHANNELS.RESPALDOS_ESTABLECER_ACTIVO, id, habilitado),
     historial: (id) => ipcRenderer.invoke(IPC_CHANNELS.RESPALDOS_HISTORIAL, id),
+    inventarioBak: (id) => ipcRenderer.invoke(IPC_CHANNELS.RESPALDOS_INVENTARIO_BAK, id),
   },
   archivos: {
     listar: (limite) => ipcRenderer.invoke(IPC_CHANNELS.ARCHIVOS_LISTAR, limite),

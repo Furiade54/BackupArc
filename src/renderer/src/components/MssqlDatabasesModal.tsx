@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { BaseDatosMssql } from '../../../shared/types/api.types';
+import type { BaseDatosMssql, ConfiguracionMssql } from '../../../shared/types/api.types';
 import { Modal } from './Modal';
 import './BackupModals.css';
 
 interface MssqlDatabasesModalProps {
   seleccionadas: string[];
+  conexion: ConfiguracionMssql | null;
+  respaldoId?: number;
   alCerrar: () => void;
   alConfirmar: (bases: string[]) => void;
 }
@@ -14,6 +16,8 @@ const ESTADO_DESCONOCIDA = 'NO ENCONTRADA';
 
 export function MssqlDatabasesModal({
   seleccionadas,
+  conexion,
+  respaldoId,
   alCerrar,
   alConfirmar,
 }: MssqlDatabasesModalProps) {
@@ -29,7 +33,7 @@ export function MssqlDatabasesModal({
 
     void (async () => {
       try {
-        const resultado = await window.api.mssql.basesDatos();
+        const resultado = await window.api.mssql.basesDatos(conexion, respaldoId);
 
         if (cancelado) {
           return;
@@ -61,7 +65,7 @@ export function MssqlDatabasesModal({
     return () => {
       cancelado = true;
     };
-  }, [seleccionadas, intento]);
+  }, [seleccionadas, conexion, respaldoId, intento]);
 
   const disponibles = useMemo(
     () =>

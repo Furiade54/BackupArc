@@ -71,6 +71,48 @@ export function formatearFrecuencia(minutos: number): string {
   return `cada ${minutos} min`;
 }
 
+// Duración detallada para rachas de fallas: "12 minutos", "2 días, 3 horas y 5 minutos".
+export function formatearDuracionDetallada(valor: string | null, ahora: number): string {
+  if (!valor) {
+    return '—';
+  }
+
+  const fecha = fechaValida(valor);
+
+  if (!fecha) {
+    return '—';
+  }
+
+  const totalMinutos = Math.max(0, Math.floor((ahora - fecha.getTime()) / 60_000));
+
+  if (totalMinutos < 1) {
+    return 'menos de un minuto';
+  }
+
+  const dias = Math.floor(totalMinutos / 1440);
+  const horas = Math.floor((totalMinutos % 1440) / 60);
+  const minutos = totalMinutos % 60;
+  const partes: string[] = [];
+
+  if (dias > 0) {
+    partes.push(`${dias} ${dias === 1 ? 'día' : 'días'}`);
+  }
+
+  if (horas > 0) {
+    partes.push(`${horas} ${horas === 1 ? 'hora' : 'horas'}`);
+  }
+
+  if (minutos > 0) {
+    partes.push(`${minutos} ${minutos === 1 ? 'minuto' : 'minutos'}`);
+  }
+
+  if (partes.length === 1) {
+    return partes[0];
+  }
+
+  return `${partes.slice(0, -1).join(', ')} y ${partes[partes.length - 1]}`;
+}
+
 export function formatearAntiguedad(valor: string | null, ahora: number): string {
   if (!valor) {
     return '—';
@@ -99,5 +141,18 @@ export function formatearAntiguedad(valor: string | null, ahora: number): string
   }
 
   const dias = Math.floor(horas / 24);
-  return dias === 1 ? 'hace 1 día' : `hace ${dias} días`;
+
+  if (dias < 30) {
+    return dias === 1 ? 'hace 1 día' : `hace ${dias} días`;
+  }
+
+  const meses = Math.floor(dias / 30);
+
+  if (meses < 12) {
+    return meses === 1 ? 'hace 1 mes' : `hace ${meses} meses`;
+  }
+
+  const anios = Math.floor(dias / 365);
+
+  return anios === 1 ? 'hace 1 año' : `hace ${anios} años`;
 }

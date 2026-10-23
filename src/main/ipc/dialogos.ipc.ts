@@ -3,6 +3,26 @@ import { IPC_CHANNELS } from '../../shared/constants/ipc-channels';
 import type { ResultadoIpc } from '../../shared/types/api.types';
 import { validarRemitente } from './remitente';
 
+async function seleccionarRuta(
+  evento: Electron.IpcMainInvokeEvent,
+  opciones: Electron.OpenDialogOptions,
+  rutaInicial: unknown,
+): Promise<ResultadoIpc<string | null>> {
+  try {
+    const ventana = validarRemitente(evento);
+
+    if (typeof rutaInicial === 'string' && rutaInicial.trim().length > 0) {
+      opciones.defaultPath = rutaInicial.trim();
+    }
+
+    const resultado = await dialog.showOpenDialog(ventana, opciones);
+
+    return { ok: true, datos: resultado.canceled ? null : (resultado.filePaths[0] ?? null) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 export function registrarIpcDialogos(): void {
   ipcMain.handle(
     IPC_CHANNELS.SISTEMA_ABRIR_RUTA,
@@ -23,27 +43,27 @@ export function registrarIpcDialogos(): void {
     },
   );
 
-  ipcMain.handle(
-    IPC_CHANNELS.DIALOGO_SELECCIONAR_CARPETA,
-    async (evento, rutaInicial: unknown): Promise<ResultadoIpc<string | null>> => {
-      try {
-        const ventana = validarRemitente(evento);
-        const opciones: Electron.OpenDialogOptions = {
-          title: 'Seleccionar carpeta',
-          buttonLabel: 'Seleccionar carpeta',
-          properties: ['openDirectory', 'createDirectory', 'dontAddToRecent'],
-        };
+  ipcMain.handle(IPC_CHANNELS.DIALOGO_SELECCIONAR_CARPETA, (evento, rutaInicial: unknown) =>
+    seleccionarRuta(
+      evento,
+      {
+        title: 'Seleccionar carpeta',
+        buttonLabel: 'Seleccionar carpeta',
+        properties: ['openDirectory', 'createDirectory', 'dontAddToRecent'],
+      },
+      rutaInicial,
+    ),
+  );
 
-        if (typeof rutaInicial === 'string' && rutaInicial.trim().length > 0) {
-          opciones.defaultPath = rutaInicial.trim();
-        }
-
-        const resultado = await dialog.showOpenDialog(ventana, opciones);
-
-        return { ok: true, datos: resultado.canceled ? null : (resultado.filePaths[0] ?? null) };
-      } catch (error) {
-        return { ok: false, error: error instanceof Error ? error.message : String(error) };
-      }
-    },
+  ipcMain.handle(IPC_CHANNELS.DIALOGO_SELECCIONAR_ARCHIVO, (evento, rutaInicial: unknown) =>
+    seleccionarRuta(
+      evento,
+      {
+        title: 'Seleccionar archivo',
+        buttonLabel: 'Seleccionar archivo',
+        properties: ['openFile', 'dontAddToRecent'],
+      },
+      rutaInicial,
+    ),
   );
 }
