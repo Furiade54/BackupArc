@@ -288,6 +288,39 @@ function ejecutarInstalador(rutaMsi: string): Promise<void> {
   });
 }
 
+// Un proceso independiente espera a que el instalador termine y vuelve a abrir
+// la app: la actualización se ejecuta aparte y el proceso actual se cierra.
+function programarReinicioTrasInstalacion(): void {
+  const escapar = (valor: string) => valor.replace(/'/g, "''");
+  const comando = [
+    // Margen para que msiexec arranque antes de la primera comprobación.
+    'Start-Sleep -Seconds 3',
+    '$limite = (Get-Date).AddMinutes(30)',
+    'while ((Get-Date) -lt $limite) {',
+    '  if (-not (Get-Process -Name msiexec -ErrorAction SilentlyContinue)) { break }',
+    '  Start-Sleep -Seconds 2',
+    '}',
+    // El instalador puede tardar en liberar los archivos: se reintenta abrir.
+    'Start-Sleep -Seconds 2',
+    'for ($i = 0; $i -lt 30; $i++) {',
+    `  try { Start-Process -FilePath '${escapar(process.execPath)}' -ErrorAction Stop; break } catch { Start-Sleep -Seconds 2 }`,
+    '}',
+  ].join('\n');
+
+  try {
+    const hijo = spawn(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', comando],
+      { detached: true, stdio: 'ignore', windowsHide: true },
+    );
+
+    hijo.unref();
+    logger.info('Reinicio programado para después de la instalación', process.execPath);
+  } catch (error) {
+    logger.warn('No se pudo programar el reinicio tras la actualización', error);
+  }
+}
+
 export async function instalarActualizacion(): Promise<void> {
   if (process.platform !== 'win32') {
     throw new Error('La instalación automática solo está disponible en Windows.');
@@ -298,6 +331,10 @@ export async function instalarActualizacion(): Promise<void> {
 
   logger.info('Instalador descargado, solicitando permisos de administrador', rutaMsi);
   await ejecutarInstalador(rutaMsi);
+
+  // Solo se programa el reinicio si el usuario aceptó los permisos: así, al
+  // cancelar el aviso de Windows, la app sigue abierta mostrando el error.
+  programarReinicioTrasInstalacion();
 
   marcarSalida();
   app.quit();

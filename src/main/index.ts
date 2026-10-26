@@ -11,7 +11,7 @@ import {
   detenerComprobadorActualizaciones,
   iniciarComprobadorActualizaciones,
 } from './services/actualizaciones.service';
-import { avisarEjecucionSegundoPlano, avisarYaEnEjecucion, crearBandeja, destruirBandeja, mostrarVentanaPrincipal } from './tray';
+import { avisarEjecucionSegundoPlano, avisarPrimerInicioDelDia, avisarYaEnEjecucion, crearBandeja, destruirBandeja, mostrarVentanaPrincipal } from './tray';
 import { logger } from './utils/logger';
 import { crearVentanaPrincipal, marcarSalida } from './window';
 
@@ -55,6 +55,7 @@ if (!bloqueoInstancia) {
     registrarManejadoresIpc();
     const ventanaPrincipal = crearVentanaPrincipal();
     crearBandeja();
+    avisarPrimerInicioDelDia();
     ventanaPrincipal.on('hide', avisarEjecucionSegundoPlano);
     logger.info('BackupArc 2.0 iniciado');
 

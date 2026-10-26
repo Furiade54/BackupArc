@@ -233,6 +233,22 @@ export function inicializarBaseDatosLocal(): void {
       conexion.exec('ALTER TABLE respaldos ADD COLUMN verificar_bak INTEGER NOT NULL DEFAULT 0');
     }
 
+    if (!columnasRespaldos.some((columna) => columna.name === 'usar_copia_temporal')) {
+      conexion.exec('ALTER TABLE respaldos ADD COLUMN usar_copia_temporal INTEGER NOT NULL DEFAULT 0');
+    }
+
+    if (!columnasRespaldos.some((columna) => columna.name === 'carpeta_temporal')) {
+      conexion.exec('ALTER TABLE respaldos ADD COLUMN carpeta_temporal TEXT');
+    }
+
+    if (!columnasRespaldos.some((columna) => columna.name === 'carpeta_temporal_lectura')) {
+      conexion.exec('ALTER TABLE respaldos ADD COLUMN carpeta_temporal_lectura TEXT');
+    }
+
+    if (!columnasRespaldos.some((columna) => columna.name === 'carpeta_zip')) {
+      conexion.exec('ALTER TABLE respaldos ADD COLUMN carpeta_zip TEXT');
+    }
+
     const columnasEjecuciones = conexion
       .prepare('PRAGMA table_info(ejecuciones_respaldo)')
       .all() as unknown as ColumnaTabla[];
@@ -258,6 +274,8 @@ export function inicializarBaseDatosLocal(): void {
         base_fecha TEXT,
         tamano_bytes INTEGER,
         compresion TEXT,
+        archivo_zip TEXT,
+        tamano_zip_bytes INTEGER,
         estado TEXT NOT NULL,
         detalle TEXT,
         FOREIGN KEY (ejecucion_id) REFERENCES ejecuciones_respaldo(id) ON DELETE CASCADE
@@ -273,6 +291,14 @@ export function inicializarBaseDatosLocal(): void {
 
     if (!columnasResultados.some((columna) => columna.name === 'compresion')) {
       conexion.exec('ALTER TABLE resultados_respaldo ADD COLUMN compresion TEXT');
+    }
+
+    if (!columnasResultados.some((columna) => columna.name === 'archivo_zip')) {
+      conexion.exec('ALTER TABLE resultados_respaldo ADD COLUMN archivo_zip TEXT');
+    }
+
+    if (!columnasResultados.some((columna) => columna.name === 'tamano_zip_bytes')) {
+      conexion.exec('ALTER TABLE resultados_respaldo ADD COLUMN tamano_zip_bytes INTEGER');
     }
 
     conexion.exec('COMMIT');

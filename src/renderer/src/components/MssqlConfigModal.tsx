@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { ConfiguracionMssql } from '../../../shared/types/api.types';
 import { pareceServidorRemoto } from '../../../shared/utils/servidor-mssql';
 import { Modal } from './Modal';
@@ -33,8 +34,20 @@ export function MssqlConfigModal({
   const [ubicacionElegida, setUbicacionElegida] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [probando, setProbando] = useState(false);
-  const [prueba, setPrueba] = useState<{ ok: boolean; mensaje: string } | null>(null);
+  const [errorPrueba, setErrorPrueba] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Conexión exitosa: se muestra como aviso flotante, fuera del formulario.
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!aviso) {
+      return;
+    }
+
+    const temporizador = setTimeout(() => setAviso(null), 7000);
+
+    return () => clearTimeout(temporizador);
+  }, [aviso]);
 
   const recolectar = (): ConfiguracionMssql => ({
     servidor: servidor.trim(),
@@ -87,7 +100,8 @@ export function MssqlConfigModal({
 
     setProbando(true);
     setError(null);
-    setPrueba(null);
+    setErrorPrueba(null);
+    setAviso(null);
 
     try {
       const resultado = await window.api.mssql.probar(recolectar(), respaldoId);
@@ -97,14 +111,18 @@ export function MssqlConfigModal({
         return;
       }
 
-      setPrueba({
-        ok: resultado.datos.ok,
-        mensaje: resultado.datos.version
-          ? `${resultado.datos.mensaje} ${resultado.datos.version}`
-          : resultado.datos.mensaje,
-      });
+      const mensaje = resultado.datos.version
+        ? `${resultado.datos.mensaje} ${resultado.datos.version}`
+        : resultado.datos.mensaje;
+
+      if (resultado.datos.ok) {
+        // Éxito: aviso flotante en la esquina, no dentro del formulario.
+        setAviso(mensaje);
+      } else {
+        setErrorPrueba(mensaje);
+      }
     } catch {
-      setPrueba({ ok: false, mensaje: 'No se pudo probar la conexión.' });
+      setErrorPrueba('No se pudo probar la conexión.');
     } finally {
       setProbando(false);
     }
@@ -120,7 +138,7 @@ export function MssqlConfigModal({
 
     setGuardando(true);
     setError(null);
-    setPrueba(null);
+    setErrorPrueba(null);
 
     try {
       // Solo se guardan credenciales que ya lograron conectar.
@@ -132,7 +150,7 @@ export function MssqlConfigModal({
       }
 
       if (!comprobacion.datos.ok) {
-        setPrueba({ ok: false, mensaje: comprobacion.datos.mensaje });
+        setErrorPrueba(comprobacion.datos.mensaje);
         return;
       }
 
@@ -147,7 +165,8 @@ export function MssqlConfigModal({
   const ocupado = guardando || probando;
 
   return (
-    <Modal titulo="Conexión SQL Server" alCerrar={alCerrar} clase="modal--conexion">
+    <>
+      <Modal titulo="Conexión SQL Server" alCerrar={alCerrar} clase="modal--conexion">
       <div className="formulario">
         <div className="formulario__fila">
           <div className="campo">
@@ -268,9 +287,9 @@ export function MssqlConfigModal({
           </span>
         </div>
 
-        {prueba && (
-          <p className={`conexion__resultado conexion__resultado--${prueba.ok ? 'ok' : 'error'}`} role="status">
-            {prueba.mensaje}
+        {errorPrueba && (
+          <p className="conexion__resultado conexion__resultado--error" role="alert">
+            {errorPrueba}
           </p>
         )}
 
@@ -294,6 +313,27 @@ export function MssqlConfigModal({
           </button>
         </div>
       </div>
-    </Modal>
+      </Modal>
+
+      {aviso &&
+        createPortal(
+          <div className="toast" role="status" aria-live="polite">
+            <span className="toast__icono" aria-hidden="true">
+              ✓
+            </span>
+            <p className="toast__mensaje">{aviso}</p>
+            <button
+              type="button"
+              className="toast__cerrar"
+              aria-label="Cerrar aviso"
+              title="Cerrar"
+              onClick={() => setAviso(null)}
+            >
+              ×
+            </button>
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }

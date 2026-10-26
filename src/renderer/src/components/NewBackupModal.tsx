@@ -68,6 +68,14 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
   const [fullCadaDias, setFullCadaDias] = useState(String(respaldo?.fullCadaDias ?? 7));
   const [comprimirBak, setComprimirBak] = useState(respaldo?.comprimirBak ?? false);
   const [verificarBak, setVerificarBak] = useState(respaldo?.verificarBak ?? false);
+  const [usarCopiaTemporal, setUsarCopiaTemporal] = useState(
+    respaldo?.usarCopiaTemporal ?? false,
+  );
+  const [carpetaTemporal, setCarpetaTemporal] = useState(respaldo?.carpetaTemporal ?? '');
+  const [carpetaTemporalLectura, setCarpetaTemporalLectura] = useState(
+    respaldo?.carpetaTemporalLectura ?? '',
+  );
+  const [carpetaZip, setCarpetaZip] = useState(respaldo?.carpetaZip ?? '');
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [indicePaso, setIndicePaso] = useState(0);
@@ -127,7 +135,11 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
           return 'Selecciona al menos una base de datos con el botón Explorar.';
         }
 
-        return destino.trim() ? null : 'Indica la carpeta destino en el servidor SQL.';
+        if (!destino.trim()) {
+          return 'Indica la carpeta destino en el servidor SQL.';
+        }
+
+        return null;
       }
 
       if (!origen.trim()) {
@@ -172,8 +184,9 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
     return null;
   };
 
-  const explorarCarpeta = async (campo: 'origen' | 'destino') => {
-    const rutaActual = campo === 'origen' ? origen : destino;
+  const explorarCarpeta = async (campo: 'origen' | 'destino' | 'zip') => {
+    const rutaActual =
+      campo === 'origen' ? origen : campo === 'destino' ? destino : carpetaZip;
     const resultado = await window.api.dialogos.seleccionarCarpeta(rutaActual.trim() || undefined);
 
     if (!resultado.ok) {
@@ -187,8 +200,10 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
 
     if (campo === 'origen') {
       setOrigen(resultado.datos);
-    } else {
+    } else if (campo === 'destino') {
       setDestino(resultado.datos);
+    } else {
+      setCarpetaZip(resultado.datos);
     }
   };
 
@@ -247,6 +262,10 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
         fullCadaDias: esMssql ? fullCadaDiasNumero : 7,
         comprimirBak: esMssql ? comprimirBak : false,
         verificarBak: esMssql ? verificarBak : false,
+        usarCopiaTemporal: esMssql ? usarCopiaTemporal : false,
+        carpetaTemporal: esMssql ? carpetaTemporal.trim() : '',
+        carpetaTemporalLectura: esMssql ? carpetaTemporalLectura.trim() : '',
+        carpetaZip: esMssql ? carpetaZip.trim() : '',
       };
 
       const resultado = respaldo
@@ -511,6 +530,76 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                       </span>
                     ))}
                 </div>
+
+                {esMssql && (
+                  <div className="campo">
+                    <label className="campo__casilla">
+                      <input
+                        type="checkbox"
+                        checked={usarCopiaTemporal}
+                        disabled={guardando}
+                        onChange={(evento) => setUsarCopiaTemporal(evento.target.checked)}
+                      />
+                      Respaldar a una carpeta temporal y luego copiar al destino
+                    </label>
+                    <span className="campo__ayuda">
+                      SQL escribe en una carpeta local del servidor y esta app copia el .bak a la
+                      carpeta destino. Útil cuando SQL Server no tiene permisos para escribir
+                      directamente en el destino (por ejemplo, un NAS en red).
+                    </span>
+
+                    {usarCopiaTemporal && (
+                      <>
+                        <label htmlFor="backup-carpeta-temporal">
+                          Carpeta temporal (opcional)
+                        </label>
+                        <div className="campo__ruta">
+                          <input
+                            id="backup-carpeta-temporal"
+                            type="text"
+                            value={carpetaTemporal}
+                            maxLength={500}
+                            placeholder="Carpeta de backup predeterminada del servidor SQL"
+                            disabled={guardando}
+                            onChange={(evento) => setCarpetaTemporal(evento.target.value)}
+                          />
+                        </div>
+                        <span className="campo__ayuda">
+                          {carpetaTemporal.trim()
+                            ? 'Ruta donde SQL Server escribirá el .bak intermedio.'
+                            : 'Si lo dejas vacío se usará la carpeta de backup predeterminada de la instancia MSSQL.'}
+                        </span>
+
+                        {servidorMssqlRemoto && (
+                          <>
+                            <label htmlFor="backup-carpeta-temporal-lectura">
+                              Ruta de lectura (opcional)
+                            </label>
+                            <div className="campo__ruta">
+                              <input
+                                id="backup-carpeta-temporal-lectura"
+                                type="text"
+                                value={carpetaTemporalLectura}
+                                maxLength={500}
+                                placeholder="Ej. \\AVES2023\BackupArc\Temp"
+                                disabled={guardando}
+                                onChange={(evento) => setCarpetaTemporalLectura(evento.target.value)}
+                              />
+                            </div>
+                            <span className="campo__ayuda">
+                              Ruta UNC desde la que esta app lee el .bak temporal. Déjala vacía
+                              solo si la carpeta temporal es accesible desde este equipo.
+                            </span>
+                            <span className="campo__ayuda">
+                              La carpeta temporal debe existir en el servidor SQL y ser accesible
+                              por su cuenta de servicio.
+                            </span>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
               </>
             )}
 
@@ -651,7 +740,7 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                           disabled={guardando}
                           onChange={(evento) => setComprimirBak(evento.target.checked)}
                         />
-                        Comprimir el .bak (WITH COMPRESSION)
+                        Comprimir el .bak en .zip
                       </label>
 
                       <label className="campo__casilla">
@@ -665,10 +754,41 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                       </label>
 
                       <span className="campo__ayuda">
-                        La verificación lee el archivo completo y puede alargar la ejecución. Si la
-                        edición no admite compresión, el backup se hace sin ella y queda registrado.
+                        La verificación lee el archivo completo y puede alargar la ejecución. El
+                        .zip usa el nombre de la base y se reemplaza en cada ejecución; el .bak
+                        original se conserva.
                       </span>
                     </div>
+
+                    {comprimirBak && (
+                      <div className="campo">
+                        <label htmlFor="backup-carpeta-zip">Carpeta del .zip (opcional)</label>
+                        <div className="campo__ruta">
+                          <input
+                            id="backup-carpeta-zip"
+                            type="text"
+                            value={carpetaZip}
+                            maxLength={500}
+                            placeholder="Vacío = misma carpeta destino"
+                            disabled={guardando}
+                            onChange={(evento) => setCarpetaZip(evento.target.value)}
+                          />
+                          <button
+                            type="button"
+                            className="boton boton--secundario"
+                            disabled={guardando}
+                            onClick={() => void explorarCarpeta('zip')}
+                          >
+                            Explorar
+                          </button>
+                        </div>
+                        <span className="campo__ayuda">
+                          Carpeta de este equipo donde la app escribe el .zip; puede ser una ruta de
+                          red (UNC). Si la dejas vacía, el .zip se guarda junto al .bak en el
+                          destino.
+                        </span>
+                      </div>
+                    )}
 
                     <p className="campo__aviso" role="note">
                       Los .bak se guardan en el servidor SQL y no se borran automáticamente desde la

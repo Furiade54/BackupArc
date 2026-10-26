@@ -2,11 +2,10 @@ import { useEffect, useState } from 'react';
 import type {
   ArchivoBakInventario,
   EjecucionRespaldo,
-  InformeBak,
   InventarioBak,
   RespaldoConfigurado,
 } from '../../../shared/types/respaldo.types';
-import { formatearBasesDatos, parsearBasesDatos } from '../../../shared/utils/bases-datos';
+import { formatearBasesDatos } from '../../../shared/utils/bases-datos';
 import {
   ETIQUETAS_ESTADO,
   formatearFecha,
@@ -14,7 +13,7 @@ import {
   formatearFrecuencia,
   formatearHora,
 } from '../utils/formato';
-import { agruparPorDia, fechaLocal, formatearDia, formatearTamano } from '../utils/informe';
+import { formatearTamano } from '../utils/informe';
 import { Modal } from './Modal';
 import './BackupModals.css';
 
@@ -62,17 +61,6 @@ export function HistoryModal({ respaldo, alCerrar }: HistoryModalProps) {
   const [inventario, setInventario] = useState<InventarioBak | null>(null);
   const [cargandoInventario, setCargandoInventario] = useState(false);
   const [errorInventario, setErrorInventario] = useState<string | null>(null);
-  const basesTarea = parsearBasesDatos(respaldo.origen);
-  const [informeDesde, setInformeDesde] = useState(() =>
-    fechaLocal(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)),
-  );
-  const [informeHasta, setInformeHasta] = useState(() => fechaLocal(new Date()));
-  const [informeBase, setInformeBase] = useState('');
-  const [informeTexto, setInformeTexto] = useState('');
-  const [informe, setInforme] = useState<InformeBak | null>(null);
-  const [informeTextoAplicado, setInformeTextoAplicado] = useState<string | null>(null);
-  const [cargandoInforme, setCargandoInforme] = useState(false);
-  const [errorInforme, setErrorInforme] = useState<string | null>(null);
   // La carpeta de un servidor remoto no existe en este equipo.
   const esRemoto = respaldo.tipo === 'mssql' && respaldo.conexionMssql?.esRemoto === true;
   const puedeAbrirDestino = !esRemoto;
@@ -141,38 +129,6 @@ export function HistoryModal({ respaldo, alCerrar }: HistoryModalProps) {
     }
   };
 
-  const consultarInforme = async () => {
-    setCargandoInforme(true);
-    setErrorInforme(null);
-
-    try {
-      const resultado = await window.api.respaldos.informeBak(respaldo.id, {
-        desde: informeDesde,
-        hasta: informeHasta,
-        baseDatos: informeBase || null,
-        texto: informeTexto.trim() || null,
-      });
-
-      if (resultado.ok) {
-        setInforme(resultado.datos);
-        setInformeTextoAplicado(informeTexto.trim() || null);
-      } else {
-        setInforme(null);
-        setErrorInforme(resultado.error);
-      }
-    } catch {
-      setInforme(null);
-      setErrorInforme('No se pudo generar el informe.');
-    } finally {
-      setCargandoInforme(false);
-    }
-  };
-
-  const gruposInforme = informe ? agruparPorDia(informe.archivos) : [];
-  const diasDelInforme = informe
-    ? informe.resumen.diasConRespaldo.length + informe.resumen.diasSinRespaldo.length
-    : 0;
-
   return (
     <Modal titulo={`Historial · ${respaldo.nombre}`} alCerrar={alCerrar}>
       <dl className="resumen-respaldo">
@@ -226,8 +182,11 @@ export function HistoryModal({ respaldo, alCerrar }: HistoryModalProps) {
               <dt>Opciones del .bak</dt>
               <dd>
                 {[
-                  respaldo.comprimirBak ? 'Comprimido' : null,
+                  respaldo.comprimirBak
+                    ? `Comprimido en .zip${respaldo.carpetaZip ? ` (${respaldo.carpetaZip})` : ''}`
+                    : null,
                   respaldo.verificarBak ? 'Verificado al terminar' : null,
+                  respaldo.usarCopiaTemporal ? 'Copia temporal intermedia' : null,
                 ]
                   .filter(Boolean)
                   .join(' · ') || 'Ninguna'}
@@ -338,6 +297,15 @@ export function HistoryModal({ respaldo, alCerrar }: HistoryModalProps) {
                           </p>
                         )}
 
+                        {resultado.archivoZip && (
+                          <p className="resultados-base__archivo" title={resultado.archivoZip}>
+                            ZIP: {nombreDeRuta(resultado.archivoZip)}
+                            {resultado.tamanoZipBytes !== null
+                              ? ` · ${formatearTamano(resultado.tamanoZipBytes)}`
+                              : ''}
+                          </p>
+                        )}
+
                         {resultado.tipoEjecutado === 'diferencial' && resultado.baseArchivo && (
                           <p className="resultados-base__base-full" title={resultado.baseArchivo}>
                             Base: {nombreDeRuta(resultado.baseArchivo)}
@@ -365,195 +333,6 @@ export function HistoryModal({ respaldo, alCerrar }: HistoryModalProps) {
             </li>
           ))}
         </ul>
-      )}
-
-      {respaldo.tipo === 'mssql' && (
-        <section className="informe">
-          <h3 className="historial__titulo">Consultar respaldos por fecha</h3>
-          <p className="campo__ayuda">
-            Responde si hay respaldo de un día o de un archivo concreto. Consulta msdb en modo
-            lectura: no borra ni modifica nada.
-          </p>
-
-          <div className="informe__filtros">
-            <div className="campo">
-              <label htmlFor="informe-desde">Desde</label>
-              <input
-                id="informe-desde"
-                type="date"
-                value={informeDesde}
-                max={informeHasta}
-                onChange={(evento) => setInformeDesde(evento.target.value)}
-              />
-            </div>
-            <div className="campo">
-              <label htmlFor="informe-hasta">Hasta</label>
-              <input
-                id="informe-hasta"
-                type="date"
-                value={informeHasta}
-                min={informeDesde}
-                onChange={(evento) => setInformeHasta(evento.target.value)}
-              />
-            </div>
-            <div className="campo">
-              <label htmlFor="informe-base">Base de datos</label>
-              <select
-                id="informe-base"
-                value={informeBase}
-                onChange={(evento) => setInformeBase(evento.target.value)}
-              >
-                <option value="">Todas</option>
-                {basesTarea.map((base) => (
-                  <option key={base} value={base}>
-                    {base}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="campo">
-              <label htmlFor="informe-texto">Archivo</label>
-              <input
-                id="informe-texto"
-                type="search"
-                placeholder="Parte del nombre, ej. ANTILLAS3_full"
-                maxLength={200}
-                value={informeTexto}
-                onChange={(evento) => setInformeTexto(evento.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="informe__acciones">
-            <button
-              type="button"
-              className="boton boton--secundario"
-              disabled={cargandoInforme}
-              onClick={() => void consultarInforme()}
-            >
-              {cargandoInforme ? 'Consultando…' : 'Consultar'}
-            </button>
-          </div>
-
-          {errorInforme && (
-            <p className="formulario__error" role="alert">
-              {errorInforme}
-            </p>
-          )}
-
-          {informe && (
-            <div className="informe__resultado">
-              <p className="campo__ayuda" title={informe.carpeta}>
-                Carpeta consultada: {informe.carpeta}
-              </p>
-
-              <p
-                className={`informe__veredicto informe__veredicto--${
-                  informe.resumen.total > 0 ? 'si' : 'no'
-                }`}
-              >
-                {informe.resumen.total > 0
-                  ? `Sí hay respaldo: ${informe.resumen.total} registro${
-                      informe.resumen.total === 1 ? '' : 's'
-                    } entre ${formatearDia(informe.desde)} y ${formatearDia(informe.hasta)}.`
-                  : `No hay respaldo registrado entre ${formatearDia(informe.desde)} y ${formatearDia(informe.hasta)}.`}
-              </p>
-
-              {informeTextoAplicado && (
-                <p className="campo__ayuda">
-                  Filtrado por archivos que contienen «{informeTextoAplicado}».
-                </p>
-              )}
-
-              <dl className="informe__resumen">
-                <div>
-                  <dt>Total</dt>
-                  <dd>{informe.resumen.total}</dd>
-                </div>
-                <div>
-                  <dt>Full</dt>
-                  <dd>{informe.resumen.completos}</dd>
-                </div>
-                <div>
-                  <dt>Diff</dt>
-                  <dd>{informe.resumen.diferenciales}</dd>
-                </div>
-                <div>
-                  <dt>Tamaño</dt>
-                  <dd>{formatearTamano(informe.resumen.tamanoTotalBytes)}</dd>
-                </div>
-                <div>
-                  <dt>Días con respaldo</dt>
-                  <dd>
-                    {informe.resumen.diasConRespaldo.length} de {diasDelInforme}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Bases</dt>
-                  <dd title={informe.resumen.bases.join(', ')}>
-                    {informe.resumen.bases.join(', ') || '—'}
-                  </dd>
-                </div>
-              </dl>
-
-              {informe.resumen.diasSinRespaldo.length > 0 && (
-                <p className="informe__huecos">
-                  Días sin ningún respaldo: {informe.resumen.diasSinRespaldo.map(formatearDia).join(', ')}.
-                </p>
-              )}
-
-              {informe.truncado && (
-                <p className="campo__aviso">
-                  La lista se cortó por el límite de resultados. Reduce el rango o filtra por base.
-                </p>
-              )}
-
-              {gruposInforme.length > 0 && (
-                <ul className="informe__dias">
-                  {gruposInforme.map(([dia, archivos]) => (
-                    <li key={dia} className="informe__dia">
-                      <div className="informe__dia-cabecera">
-                        <span className="informe__dia-fecha">{formatearDia(dia)}</span>
-                        <span className="informe__dia-cuenta">
-                          {archivos.length} respaldo{archivos.length === 1 ? '' : 's'}
-                        </span>
-                      </div>
-
-                      <ul className="informe__archivos">
-                        {archivos.map((archivo) => (
-                          <li
-                            key={`${archivo.archivo}-${archivo.fecha}`}
-                            className="informe__archivo"
-                          >
-                            <div className="informe__archivo-fila">
-                              <span
-                                className={`inventario__tipo inventario__tipo--${archivo.tipo}`}
-                              >
-                                {archivo.tipo === 'diferencial' ? 'Diff' : 'Full'}
-                              </span>
-                              <span className="informe__archivo-base">{archivo.baseDatos}</span>
-                              <span className="informe__archivo-meta">
-                                {formatearHora(archivo.fecha)} ·{' '}
-                                {formatearTamano(archivo.tamanoBytes)}
-                                {archivo.esCopyOnly && ' · COPY_ONLY'}
-                                {archivo.familias > 1 && ` · ${archivo.familias} archivos`}
-                              </span>
-                            </div>
-                            <p className="informe__archivo-nombre" title={archivo.archivo}>
-                              {archivo.nombre}
-                            </p>
-                          </li>
-                        ))}
-                      </ul>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              <p className="campo__ayuda">{informe.advertencia}</p>
-            </div>
-          )}
-        </section>
       )}
 
       {respaldo.tipo === 'mssql' && (

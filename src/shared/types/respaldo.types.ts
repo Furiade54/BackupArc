@@ -46,10 +46,18 @@ export interface RespaldoConfigurado {
   modoMssql: ModoRespaldoMssql;
   /** Antigüedad máxima de la base full antes de generar una nueva. */
   fullCadaDias: number;
-  /** Comprime el .bak con WITH COMPRESSION cuando la instancia lo permita. */
+  /** Comprime el .bak a .zip con la app (sin usar WITH COMPRESSION de SQL Server). */
   comprimirBak: boolean;
   /** Ejecuta RESTORE VERIFYONLY WITH CHECKSUM tras cada .bak. */
   verificarBak: boolean;
+  /** Respalda a una carpeta temporal local y luego copia al destino final. */
+  usarCopiaTemporal: boolean;
+  /** Ruta local en el servidor SQL donde se escribe el .bak temporal. */
+  carpetaTemporal: string;
+  /** Ruta desde la que la app lee el .bak temporal; vacía = carpetaTemporal. */
+  carpetaTemporalLectura: string;
+  /** Carpeta donde la app escribe el .zip; vacía = misma carpeta destino. */
+  carpetaZip: string;
   habilitado: boolean;
   ultimaEjecucion: string | null;
   /** Inicio de la racha actual de fallas consecutivas. */
@@ -74,6 +82,10 @@ export interface NuevoRespaldo {
   fullCadaDias: number;
   comprimirBak: boolean;
   verificarBak: boolean;
+  usarCopiaTemporal: boolean;
+  carpetaTemporal: string;
+  carpetaTemporalLectura: string;
+  carpetaZip: string;
 }
 
 /** Resultado de respaldar una base concreta dentro de una ejecución. */
@@ -88,6 +100,10 @@ export interface ResultadoBaseRespaldo {
   baseFecha: string | null;
   tamanoBytes: number | null;
   compresion: CompresionBak;
+  /** Ruta del .zip generado cuando la app comprime el .bak. */
+  archivoZip: string | null;
+  /** Tamaño en bytes del .zip generado. */
+  tamanoZipBytes: number | null;
   estado: EstadoRespaldo;
   detalle: string | null;
 }
@@ -201,6 +217,18 @@ export interface InformeGlobalBak {
   ejecucionesArchivos: EjecucionArchivoInforme[];
   /** null cuando el filtro apunta a una base o a un archivo .bak. */
   resumenArchivos: ResumenArchivosInforme | null;
+  /** Tamaño de los .zip vigentes dentro del rango consultado. */
+  resumenZip: ResumenZipInforme;
+}
+
+/**
+ * Un .zip por base y tarea se reemplaza en cada ejecución, por lo que solo se
+ * cuenta el más reciente de cada base dentro del rango.
+ */
+export interface ResumenZipInforme {
+  /** Cantidad de .zip vigentes (uno por base y tarea). */
+  archivos: number;
+  tamanoTotalBytes: number;
 }
 
 /** Ejecución de una tarea de archivos o carpetas dentro del informe global. */

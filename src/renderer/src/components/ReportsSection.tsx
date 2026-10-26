@@ -210,6 +210,18 @@ export function ReportsSection({ respaldos }: ReportsSectionProps) {
                     <dt>Tamaño</dt>
                     <dd>{formatearTamano(informe.resumen.tamanoTotalBytes)}</dd>
                   </div>
+                  {informe.resumenZip.archivos > 0 && (
+                    <div>
+                      <dt>Tamaño .zip</dt>
+                      <dd
+                        title={`${informe.resumenZip.archivos} .zip vigente${
+                          informe.resumenZip.archivos === 1 ? '' : 's'
+                        } (el más reciente de cada base)`}
+                      >
+                        {formatearTamano(informe.resumenZip.tamanoTotalBytes)}
+                      </dd>
+                    </div>
+                  )}
                   <div>
                     <dt>Días con respaldo</dt>
                     <dd>

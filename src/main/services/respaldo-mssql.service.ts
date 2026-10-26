@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto';
+import { createWriteStream, promises as fs } from 'node:fs';
 import path from 'node:path';
+import { ZipArchive, type ArchiverError } from 'archiver';
+import { app } from 'electron';
 import sql from 'mssql';
 import type {
   ArchivoBakInforme,
   ArchivoBakInformeGlobal,
   ArchivoBakInventario,
   CompresionBak,
-  ConexionMssql,
   FiltroInformeBak,
   InformeBak,
   InformeGlobalBak,
@@ -22,6 +24,7 @@ import {
   listarRespaldos,
   obtenerConexionMssqlRespaldo,
   consultarEjecucionesArchivos,
+  consultarResumenZip,
 } from '../repositories/respaldos-local.repository';
 import { logger } from '../utils/logger';
 import { marcaTiempo } from '../utils/nombres-respaldo';
@@ -66,15 +69,6 @@ interface FilaDiferencial {
 }
 
 const MINUTOS_POR_DIA = 1_440;
-
-// Único error que habilita reintentar sin compresión: la edición no la admite.
-// Cualquier otro fallo (espacio, permisos, ruta) se propaga tal cual.
-const NUMEROS_SIN_COMPRESION = new Set([3097]);
-const PATRON_SIN_COMPRESION =
-  /compression is not supported|no se admite la compresi[oó]n|la compresi[oó]n no se (?:admite|soporta)|compresi[oó]n[^.\n]{0,40}no (?:es )?compatible/i;
-
-// Instancias que ya respondieron "sin soporte": no se vuelve a intentar.
-const conexionesSinCompresion = new Set<string>();
 
 interface ErrorSql {
   numero: number | null;
@@ -173,12 +167,6 @@ function lsnCoincide(a: string | number | null, b: string | number | null): bool
   }
 
   return primero === segundo;
-}
-
-function claveConexion(conexion: ConexionMssql): string {
-  return `${conexion.servidor.trim().toLowerCase()}:${conexion.puerto}|${conexion.usuario
-    .trim()
-    .toLowerCase()}`;
 }
 
 interface FilaErrorLog {
@@ -314,14 +302,42 @@ async function probarCarpetaDestino(
   }
 }
 
-function esCompresionNoSoportada(error: unknown): boolean {
-  const errores = erroresSqlDe(error);
+// Carpeta de backup predeterminada de la propia instancia (SQL Server 2012+).
+async function carpetaBackupPredeterminada(pool: sql.ConnectionPool): Promise<string | null> {
+  try {
+    const resultado = await pool.request().query<{ ruta: string | null }>(`
+      SELECT CONVERT(nvarchar(4000), SERVERPROPERTY('InstanceDefaultBackupPath')) AS ruta
+    `);
 
-  if (errores.some((registro) => registro.numero !== null && NUMEROS_SIN_COMPRESION.has(registro.numero))) {
-    return true;
+    return resultado.recordset[0]?.ruta?.trim() || null;
+  } catch (error) {
+    logger.warn('No se pudo leer la carpeta de backup predeterminada del servidor SQL', error);
+    return null;
+  }
+}
+
+// Carpeta temporal: la que indique el usuario o, por defecto, la carpeta de
+// backup propia de la instancia. La temporal del sistema es el último recurso.
+async function resolverCarpetaTemporal(
+  pool: sql.ConnectionPool,
+  respaldo: RespaldoConfigurado,
+): Promise<string> {
+  const propia = respaldo.carpetaTemporal.trim();
+
+  if (propia) {
+    return propia;
   }
 
-  return errores.some((registro) => PATRON_SIN_COMPRESION.test(registro.mensaje));
+  const predeterminada = await carpetaBackupPredeterminada(pool);
+
+  if (predeterminada) {
+    logger.info('Carpeta temporal por defecto del servidor SQL', predeterminada);
+    return predeterminada;
+  }
+
+  const sistema = app.getPath('temp');
+  logger.warn(`La instancia no informó su carpeta de backup; se usa la temporal del equipo: ${sistema}`);
+  return sistema;
 }
 
 // La cabecera del archivo es la fuente de verdad para tamaño y compresión.
@@ -582,6 +598,37 @@ function nombreBak(
   return `${nombre}${marca}_${etiqueta}_${runId}.bak`;
 }
 
+function empaquetarArchivo(ruta: string, rutaSalida: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const salida = createWriteStream(rutaSalida);
+    const archivo = new ZipArchive({ zlib: { level: 6 } });
+
+    salida.on('close', () => resolve());
+    salida.on('error', reject);
+    archivo.on('error', reject);
+    archivo.on('warning', (error: ArchiverError) => reject(error));
+
+    archivo.pipe(salida);
+    archivo.file(ruta, { name: path.win32.basename(ruta) });
+    void archivo.finalize();
+  });
+}
+
+// Comprime el .bak en un .zip con nombre estable, escribiendo primero en un
+// archivo parcial para no dejar un .zip incompleto si falla a mitad.
+async function comprimirBakEnZip(rutaBak: string, rutaZip: string): Promise<void> {
+  const rutaTemporal = `${rutaZip}.parcial`;
+
+  try {
+    await empaquetarArchivo(rutaBak, rutaTemporal);
+    await fs.rm(rutaZip, { force: true });
+    await fs.rename(rutaTemporal, rutaZip);
+  } catch (error) {
+    await fs.rm(rutaTemporal, { force: true });
+    throw error;
+  }
+}
+
 // Respalda cada base con su propia decisión full/diferencial. Un fallo en una
 // base no impide respaldar las demás; el resultado se devuelve por base.
 export async function respaldarBasesDatosMssql(
@@ -614,10 +661,18 @@ export async function respaldarBasesDatosMssql(
 
     await registrarIdentidadServidor(pool);
 
-    const diagnosticoCarpeta = await probarCarpetaDestino(pool, destino, runId);
+    // Sin ruta propia se usa la carpeta de backup predeterminada de la instancia.
+    const carpetaTemporal = respaldo.usarCopiaTemporal
+      ? await resolverCarpetaTemporal(pool, respaldo)
+      : '';
+
+    // Con copia temporal, SQL escribe en la carpeta intermedia; el destino
+    // final lo copia la propia app, así que no se sondea con SQL.
+    const carpetaEscritura = respaldo.usarCopiaTemporal ? carpetaTemporal : destino;
+    const diagnosticoCarpeta = await probarCarpetaDestino(pool, carpetaEscritura, runId);
     const avisoDestino =
       diagnosticoCarpeta.accesible === false
-        ? ` SQL Server (${conexion.servidor}) no pudo abrir la carpeta ${destino}: ${diagnosticoCarpeta.detalle}`
+        ? ` SQL Server (${conexion.servidor}) no pudo abrir la carpeta ${carpetaEscritura}: ${diagnosticoCarpeta.detalle}`
         : null;
 
     if (avisoDestino) {
@@ -639,7 +694,6 @@ export async function respaldarBasesDatosMssql(
     }
 
     const resultados: NuevoResultadoBaseRespaldo[] = [];
-    const clave = claveConexion(conexion);
 
     for (const baseDatos of bases) {
       const resultado = await respaldarBase(
@@ -649,8 +703,8 @@ export async function respaldarBasesDatosMssql(
         fecha,
         destino,
         runId,
-        clave,
         avisoDestino,
+        carpetaTemporal,
       );
       resultados.push(resultado);
     }
@@ -682,6 +736,8 @@ function resultadoErrorBase(
     baseFecha: tipo === 'diferencial' ? (full?.fecha ?? null) : null,
     tamanoBytes: null,
     compresion: 'desconocido',
+    archivoZip: null,
+    tamanoZipBytes: null,
     estado: 'error',
     detalle,
   };
@@ -716,17 +772,12 @@ async function ejecutarBackup(
   archivo: string,
   etiqueta: string,
   tipo: TipoEjecutadoMssql,
-  comprimir: boolean,
 ): Promise<void> {
   const identificador = `[${baseDatos.replace(/]/g, ']]')}]`;
   const opciones = ['INIT', 'CHECKSUM', 'NAME = @etiqueta'];
 
   if (tipo === 'diferencial') {
     opciones.unshift('DIFFERENTIAL');
-  }
-
-  if (comprimir) {
-    opciones.push('COMPRESSION');
   }
 
   const copia = pool.request();
@@ -746,8 +797,8 @@ async function respaldarBase(
   fecha: Date,
   destino: string,
   runId: string,
-  clave: string,
   avisoDestino: string | null,
+  carpetaTemporal: string,
 ): Promise<NuevoResultadoBaseRespaldo> {
   let tipo: TipoEjecutadoMssql = 'completo';
   let full: FullRegistrado | null = null;
@@ -775,76 +826,44 @@ async function respaldarBase(
     }
   }
 
-  const archivo = path.win32.join(
-    destino,
-    nombreBak(respaldo, fecha, tipo, baseDatos, runId),
-  );
+  const nombreArchivo = nombreBak(respaldo, fecha, tipo, baseDatos, runId);
+  // El .bak debe quedar al final en "destino"; con copia intermedia, SQL lo
+  // escribe primero en la carpeta temporal y la app lo mueve después.
+  const archivo = path.win32.join(destino, nombreArchivo);
+  const rutaBackup = respaldo.usarCopiaTemporal
+    ? path.win32.join(carpetaTemporal, nombreArchivo)
+    : archivo;
   const etiqueta = `BackupArc: ${respaldo.nombre}`;
-  const sinSoportePrevio = conexionesSinCompresion.has(clave);
-  let comprimir = respaldo.comprimirBak && !sinSoportePrevio;
-  let reintentoSinCompresion = false;
   const notaFull = tipo === 'completo' && motivoFull ? ` Full automático: ${motivoFull}.` : '';
 
   try {
-    await ejecutarBackup(pool, baseDatos, archivo, etiqueta, tipo, comprimir);
+    await ejecutarBackup(pool, baseDatos, rutaBackup, etiqueta, tipo);
   } catch (error) {
-    // Solo se reintenta cuando la causa es la falta de soporte de compresión.
-    if (comprimir && esCompresionNoSoportada(error)) {
-      conexionesSinCompresion.add(clave);
-      comprimir = false;
-      reintentoSinCompresion = true;
+    const detalle = await describirFalloBackup(pool, baseDatos, rutaBackup, error);
 
-      try {
-        // Misma ruta: INIT descarta el archivo parcial del primer intento.
-        await ejecutarBackup(pool, baseDatos, archivo, etiqueta, tipo, false);
-      } catch (reintentoError) {
-        const detalle = await describirFalloBackup(
-          pool,
-          baseDatos,
-          archivo,
-          reintentoError,
-          'La instancia no admite compresión y el reintento sin compresión también falló. ',
-        );
-
-        return resultadoErrorBase(
-          baseDatos,
-          tipo,
-          archivo,
-          full,
-          `${detalle}${notaFull}${avisoDestino ?? ''}`,
-        );
-      }
-    } else {
-      const detalle = await describirFalloBackup(pool, baseDatos, archivo, error);
-
-      return resultadoErrorBase(
-        baseDatos,
-        tipo,
-        archivo,
-        full,
-        `${detalle}${notaFull}${avisoDestino ?? ''}`,
-      );
-    }
+    return resultadoErrorBase(
+      baseDatos,
+      tipo,
+      archivo,
+      full,
+      `${detalle}${notaFull}${avisoDestino ?? ''}`,
+    );
   }
 
-  logger.info(`Copia ${tipo} de la base "${baseDatos}" completada`, archivo);
+  logger.info(`Copia ${tipo} de la base "${baseDatos}" completada`, rutaBackup);
 
-  const cabecera = await leerCabecera(pool, archivo);
-  const compresion = compresionDesdeCabecera(cabecera, comprimir);
+  const cabecera = await leerCabecera(pool, rutaBackup);
   const tamano = cabecera?.BackupSize ?? (await tamanoUltimoBackup(pool, baseDatos, tipo));
 
   let estado: NuevoResultadoBaseRespaldo['estado'] = 'ok';
   const detalles: string[] = [];
-
-  if (reintentoSinCompresion) {
-    detalles.push('La instancia no admite compresión; el backup se generó sin COMPRESSION.');
-  } else if (respaldo.comprimirBak && sinSoportePrevio) {
-    detalles.push('Compresión no aplicada: la instancia no la admite.');
-  }
+  let compresion: CompresionBak = 'no aplicada';
+  let archivoZip: string | null = null;
+  let tamanoZipBytes: number | null = null;
 
   if (tipo === 'diferencial' && full) {
     try {
-      const verificacion = await verificarBaseDiferencial(pool, baseDatos, full, archivo);
+      const verificacion = await verificarBaseDiferencial(pool, baseDatos, full, rutaBackup);
 
       if (verificacion.problema) {
         estado = 'advertencia';
@@ -852,7 +871,7 @@ async function respaldarBase(
       } else {
         logger.info(
           `Base diferencial de "${baseDatos}" verificada por ${verificacion.criterio}`,
-          archivo,
+          rutaBackup,
         );
       }
     } catch (error) {
@@ -869,12 +888,68 @@ async function respaldarBase(
     try {
       await pool
         .request()
-        .input('ruta', sql.NVarChar(4000), archivo)
+        .input('ruta', sql.NVarChar(4000), rutaBackup)
         .query('RESTORE VERIFYONLY FROM DISK = @ruta WITH CHECKSUM');
     } catch (error) {
       estado = 'error';
       detalles.push(
         `RESTORE VERIFYONLY falló: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  // Mueve el .bak de la carpeta temporal al destino final. Esta copia la hace
+  // la app (no SQL), así que usa las credenciales del equipo que la ejecuta.
+  if (respaldo.usarCopiaTemporal) {
+    const rutaLectura = path.win32.join(
+      respaldo.carpetaTemporalLectura.trim() || carpetaTemporal,
+      nombreArchivo,
+    );
+
+    if (estado === 'error') {
+      await fs.rm(rutaLectura, { force: true }).catch(() => undefined);
+    } else {
+      try {
+        await fs.mkdir(path.dirname(archivo), { recursive: true }).catch(() => undefined);
+        await fs.copyFile(rutaLectura, archivo);
+        await fs.rm(rutaLectura, { force: true });
+        detalles.push('Copia intermedia movida a la carpeta destino.');
+      } catch (error) {
+        estado = 'error';
+        detalles.push(
+          `No se pudo copiar el .bak de la carpeta temporal al destino: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+  }
+
+  // La compresión la hace la app: genera un .zip estable por base y reemplaza
+  // el anterior en cada ejecución. El .bak se conserva para SQL Server.
+  if (respaldo.comprimirBak && estado !== 'error') {
+    const nombreZip = `${nombreArchivoSeguro(baseDatos)}.zip`;
+    // Carpeta propia del .zip si se indicó; si no, junto al .bak.
+    const carpetaZip = respaldo.carpetaZip.trim() || destino;
+    const rutaZip = path.win32.join(carpetaZip, nombreZip);
+
+    try {
+      await fs.mkdir(carpetaZip, { recursive: true });
+      await comprimirBakEnZip(archivo, rutaZip);
+      const infoZip = await fs.stat(rutaZip);
+      compresion = 'aplicada';
+      archivoZip = rutaZip;
+      tamanoZipBytes = infoZip.size;
+      detalles.push(`.bak comprimido en ${rutaZip}.`);
+    } catch (error) {
+      compresion = 'no aplicada';
+
+      if (estado === 'ok') {
+        estado = 'advertencia';
+      }
+
+      detalles.push(
+        `No se pudo comprimir el .bak a .zip: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
@@ -889,6 +964,8 @@ async function respaldarBase(
     baseFecha: tipo === 'diferencial' ? (full?.fecha ?? null) : null,
     tamanoBytes: tamano,
     compresion,
+    archivoZip,
+    tamanoZipBytes,
     estado,
     detalle: detalles.length > 0 ? detalles.join(' ') : null,
   };
@@ -1402,5 +1479,6 @@ export async function consultarInformeGlobalBak(
     truncado,
     ejecucionesArchivos: consultaArchivos?.ejecuciones ?? [],
     resumenArchivos,
+    resumenZip: consultarResumenZip(filtro.desde, filtro.hasta, filtro.baseDatos),
   };
 }

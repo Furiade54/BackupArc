@@ -10,6 +10,7 @@ import type {
   ResultadoBaseRespaldo,
   RespaldoConfigurado,
   ResumenConexionMssql,
+  ResumenZipInforme,
   TipoEjecutadoMssql,
   TipoRespaldo,
 } from '../../shared/types/respaldo.types';
@@ -38,6 +39,10 @@ interface FilaRespaldo {
   full_cada_dias: number;
   comprimir_bak: number;
   verificar_bak: number;
+  usar_copia_temporal: number;
+  carpeta_temporal: string | null;
+  carpeta_temporal_lectura: string | null;
+  carpeta_zip: string | null;
   habilitado: number;
   ultima_ejecucion: string | null;
   fallo_desde: string | null;
@@ -67,6 +72,8 @@ interface FilaResultadoBase {
   base_fecha: string | null;
   tamano_bytes: number | null;
   compresion: string | null;
+  archivo_zip: string | null;
+  tamano_zip_bytes: number | null;
   estado: string;
   detalle: string | null;
 }
@@ -135,6 +142,10 @@ function mapearRespaldo(fila: FilaRespaldo): RespaldoConfigurado {
     fullCadaDias: fila.full_cada_dias,
     comprimirBak: fila.comprimir_bak === 1,
     verificarBak: fila.verificar_bak === 1,
+    usarCopiaTemporal: fila.usar_copia_temporal === 1,
+    carpetaTemporal: fila.carpeta_temporal ?? '',
+    carpetaTemporalLectura: fila.carpeta_temporal_lectura ?? '',
+    carpetaZip: fila.carpeta_zip ?? '',
     habilitado: fila.habilitado === 1,
     ultimaEjecucion: fila.ultima_ejecucion,
     falloDesde: fila.fallo_desde,
@@ -240,12 +251,16 @@ export function crearRespaldo(datos: NuevoRespaldo): RespaldoConfigurado {
         full_cada_dias,
         comprimir_bak,
         verificar_bak,
+        usar_copia_temporal,
+        carpeta_temporal,
+        carpeta_temporal_lectura,
+        carpeta_zip,
         mssql_conexion,
         ultima_ejecucion,
         proxima_ejecucion,
         ultimo_estado,
         creado_en
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'pendiente', ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'pendiente', ?)
     `)
     .run(
       datos.nombre,
@@ -261,6 +276,10 @@ export function crearRespaldo(datos: NuevoRespaldo): RespaldoConfigurado {
       datos.fullCadaDias,
       datos.comprimirBak ? 1 : 0,
       datos.verificarBak ? 1 : 0,
+      datos.usarCopiaTemporal ? 1 : 0,
+      datos.carpetaTemporal || null,
+      datos.carpetaTemporalLectura || null,
+      datos.carpetaZip || null,
       datos.conexionMssql ? cifrarConexionMssql(datos.conexionMssql) : null,
       proximaEjecucion,
       creadoEn.toISOString(),
@@ -313,6 +332,10 @@ export function actualizarRespaldo(id: number, datos: NuevoRespaldo): RespaldoCo
           full_cada_dias = ?,
           comprimir_bak = ?,
           verificar_bak = ?,
+          usar_copia_temporal = ?,
+          carpeta_temporal = ?,
+          carpeta_temporal_lectura = ?,
+          carpeta_zip = ?,
           proxima_ejecucion = ?
       WHERE id = ?
     `)
@@ -331,6 +354,10 @@ export function actualizarRespaldo(id: number, datos: NuevoRespaldo): RespaldoCo
       datos.fullCadaDias,
       datos.comprimirBak ? 1 : 0,
       datos.verificarBak ? 1 : 0,
+      datos.usarCopiaTemporal ? 1 : 0,
+      datos.carpetaTemporal || null,
+      datos.carpetaTemporalLectura || null,
+      datos.carpetaZip || null,
       proximaEjecucion,
       id,
     );
@@ -418,9 +445,11 @@ export function registrarResultadosBase(
       base_fecha,
       tamano_bytes,
       compresion,
+      archivo_zip,
+      tamano_zip_bytes,
       estado,
       detalle
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const resultado of resultados) {
@@ -435,6 +464,8 @@ export function registrarResultadosBase(
       resultado.baseFecha,
       resultado.tamanoBytes,
       resultado.compresion,
+      resultado.archivoZip,
+      resultado.tamanoZipBytes,
       resultado.estado,
       resultado.detalle,
     );
@@ -530,7 +561,8 @@ export function listarHistorialRespaldo(id: number): EjecucionRespaldo[] {
     .prepare(`
       SELECT r.id, r.ejecucion_id, r.base_datos, r.tipo_ejecutado, r.archivo,
              r.base_archivo, r.base_guid, r.base_lsn, r.base_fecha,
-             r.tamano_bytes, r.compresion, r.estado, r.detalle
+             r.tamano_bytes, r.compresion, r.archivo_zip, r.tamano_zip_bytes,
+             r.estado, r.detalle
       FROM resultados_respaldo r
       JOIN ejecuciones_respaldo e ON e.id = r.ejecucion_id
       WHERE e.respaldo_id = ?
@@ -554,6 +586,8 @@ export function listarHistorialRespaldo(id: number): EjecucionRespaldo[] {
       baseFecha: fila.base_fecha,
       tamanoBytes: fila.tamano_bytes,
       compresion: esCompresion(fila.compresion),
+      archivoZip: fila.archivo_zip,
+      tamanoZipBytes: fila.tamano_zip_bytes,
       estado: esEstadoRespaldo(fila.estado) ? fila.estado : 'pendiente',
       detalle: fila.detalle,
     });
@@ -684,5 +718,45 @@ export function consultarEjecucionesArchivos(
       diasConEjecucion: dias.map((fila) => fila.dia),
     },
     truncado: total > filas.length,
+  };
+}
+
+// Tamaño de los .zip vigentes: cada base y tarea reemplaza su .zip en cada
+// ejecución, así que solo se toma el registro más reciente de cada base
+// dentro del rango consultado.
+export function consultarResumenZip(
+  desde: string,
+  hasta: string,
+  baseDatos: string | null,
+): ResumenZipInforme {
+  const desdeIso = new Date(`${desde}T00:00:00`).toISOString();
+  const hastaIso = new Date(`${hasta}T23:59:59.999`).toISOString();
+
+  const fila = obtenerBaseDatosLocal()
+    .prepare(`
+      SELECT COUNT(*) AS archivos,
+             COALESCE(SUM(vigente.tamano_zip_bytes), 0) AS total
+      FROM (
+        SELECT r.tamano_zip_bytes,
+               ROW_NUMBER() OVER (
+                 PARTITION BY r.respaldo_id, r.base_datos
+                 ORDER BY e.fecha DESC, r.id DESC
+               ) AS orden
+        FROM resultados_respaldo r
+        JOIN ejecuciones_respaldo e ON e.id = r.ejecucion_id
+        WHERE r.archivo_zip IS NOT NULL
+          AND r.tamano_zip_bytes IS NOT NULL
+          AND e.fecha >= ? AND e.fecha <= ?
+          AND (? IS NULL OR r.base_datos = ?)
+      ) AS vigente
+      WHERE vigente.orden = 1
+    `)
+    .get(desdeIso, hastaIso, baseDatos, baseDatos) as unknown as
+    | { archivos: number | null; total: number | null }
+    | undefined;
+
+  return {
+    archivos: fila?.archivos ?? 0,
+    tamanoTotalBytes: fila?.total ?? 0,
   };
 }

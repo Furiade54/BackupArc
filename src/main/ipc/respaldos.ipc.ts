@@ -309,6 +309,24 @@ function validarNuevoRespaldo(datos: unknown): NuevoRespaldo {
       tipo === 'mssql' && registro.verificarBak !== undefined
         ? validarBooleano(registro.verificarBak, 'verificarBak')
         : false,
+    // Copia temporal: solo aplica a MSSQL. Las tareas antiguas no la envían.
+    usarCopiaTemporal:
+      tipo === 'mssql' && registro.usarCopiaTemporal !== undefined
+        ? validarBooleano(registro.usarCopiaTemporal, 'usarCopiaTemporal')
+        : false,
+    carpetaTemporal:
+      tipo === 'mssql' && registro.carpetaTemporal
+        ? validarTexto(registro.carpetaTemporal, 'carpeta temporal', MAX_RUTA)
+        : '',
+    carpetaTemporalLectura:
+      tipo === 'mssql' && registro.carpetaTemporalLectura
+        ? validarTexto(registro.carpetaTemporalLectura, 'ruta de lectura de la carpeta temporal', MAX_RUTA)
+        : '',
+    // Carpeta exclusiva del .zip: opcional, vacía = junto al .bak.
+    carpetaZip:
+      tipo === 'mssql' && registro.carpetaZip
+        ? validarTexto(registro.carpetaZip, 'carpeta del .zip', MAX_RUTA)
+        : '',
   };
 }
 
