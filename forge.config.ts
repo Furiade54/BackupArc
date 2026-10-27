@@ -46,6 +46,10 @@ const config: ForgeConfig = {
         icon: 'assets/icons/win/icon.ico',
         shortcutName: 'BackupArc',
         ui: { chooseDirectory: true },
+        // Identifica el producto entre versiones: sin este GUID fijo,
+        // electron-wix-msi genera uno aleatorio en cada compilación y cada
+        // versión se instala al lado de las anteriores. No debe cambiarse.
+        upgradeCode: '7f3c1e2a-5b64-4d9a-9c8e-1a2b3c4d5e6f',
       },
     },
     {

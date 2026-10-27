@@ -629,6 +629,145 @@ async function comprimirBakEnZip(rutaBak: string, rutaZip: string): Promise<void
   }
 }
 
+interface FilaRetencion {
+  archivo: string;
+  base_datos: string;
+  tipo: string;
+  uuid: string | null;
+  base_guid: string | null;
+  fecha: string;
+}
+
+function nombreEnMinusculas(ruta: string): string {
+  const partes = ruta.split(/[\\/]/);
+
+  return (partes[partes.length - 1] || ruta).toLowerCase();
+}
+
+// Depura los respaldos que superan la retención de la tarea. Se borran los
+// .bak/.zip de las carpetas implicadas, conservando siempre el más reciente de
+// cada base y el full del que dependen los diferenciales existentes.
+async function depurarRespaldosAntiguos(
+  pool: sql.ConnectionPool,
+  respaldo: RespaldoConfigurado,
+  destino: string,
+): Promise<void> {
+  const dias = respaldo.retencionDias;
+
+  if (!Number.isInteger(dias) || dias < 1) {
+    return;
+  }
+
+  const separador = destino.endsWith('\\') ? '' : '\\';
+  const patron = `${escaparLike(`${destino}${separador}`)}%`;
+
+  const resultado = await pool
+    .request()
+    .input('patron', sql.NVarChar(4000), patron)
+    .query<FilaRetencion>(`
+      SELECT
+        mf.physical_device_name AS archivo,
+        bs.database_name AS base_datos,
+        bs.type AS tipo,
+        CONVERT(varchar(36), bs.backup_set_uuid) AS uuid,
+        CONVERT(varchar(36), bs.differential_base_guid) AS base_guid,
+        CONVERT(varchar(33), bs.backup_finish_date, 126) AS fecha
+      FROM msdb.dbo.backupset bs
+      JOIN msdb.dbo.backupmediafamily mf ON mf.media_set_id = bs.media_set_id
+      WHERE bs.type IN ('D', 'I')
+        AND mf.physical_device_name LIKE @patron ESCAPE '\\'
+    `);
+
+  const filas = resultado.recordset ?? [];
+  const protegidos = new Set<string>();
+  const ultimoPorBase = new Map<string, FilaRetencion>();
+
+  for (const fila of filas) {
+    if (!fila.archivo) {
+      continue;
+    }
+
+    const actual = ultimoPorBase.get(fila.base_datos);
+
+    if (!actual || fila.fecha > actual.fecha) {
+      ultimoPorBase.set(fila.base_datos, fila);
+    }
+  }
+
+  for (const fila of ultimoPorBase.values()) {
+    protegidos.add(nombreEnMinusculas(fila.archivo));
+  }
+
+  // El full base de un diferencial no puede borrarse: rompería su cadena.
+  const fullPorUuid = new Map<string, string>();
+
+  for (const fila of filas) {
+    if (fila.tipo === 'D' && fila.uuid && fila.archivo) {
+      fullPorUuid.set(fila.uuid.toLowerCase(), fila.archivo);
+    }
+  }
+
+  for (const fila of filas) {
+    if (fila.tipo === 'I' && fila.base_guid) {
+      const archivoFull = fullPorUuid.get(fila.base_guid.toLowerCase());
+
+      if (archivoFull) {
+        protegidos.add(nombreEnMinusculas(archivoFull));
+      }
+    }
+  }
+
+  const limite = Date.now() - dias * 24 * 60 * 60 * 1000;
+  const carpetas = [destino];
+  const carpetaZip = respaldo.carpetaZip.trim();
+
+  if (carpetaZip && carpetaZip.toLowerCase() !== destino.toLowerCase()) {
+    carpetas.push(carpetaZip);
+  }
+
+  for (const carpeta of carpetas) {
+    let entradas;
+
+    try {
+      entradas = await fs.readdir(carpeta, { withFileTypes: true });
+    } catch (error) {
+      logger.warn(`No se pudo revisar la carpeta para depurar respaldos: ${carpeta}`, error);
+      continue;
+    }
+
+    for (const entrada of entradas) {
+      if (!entrada.isFile()) {
+        continue;
+      }
+
+      const extension = path.extname(entrada.name).toLowerCase();
+
+      if (extension !== '.bak' && extension !== '.zip') {
+        continue;
+      }
+
+      if (protegidos.has(entrada.name.toLowerCase())) {
+        continue;
+      }
+
+      const ruta = path.win32.join(carpeta, entrada.name);
+
+      try {
+        const info = await fs.stat(ruta);
+
+        if (info.mtimeMs >= limite) {
+          continue;
+        }
+
+        await fs.rm(ruta, { force: true });
+        logger.info('Respaldo eliminado por retención', ruta);
+      } catch (error) {
+        logger.warn(`No se pudo depurar el respaldo ${ruta}`, error);
+      }
+    }
+  }
+}
+
 // Respalda cada base con su propia decisión full/diferencial. Un fallo en una
 // base no impide respaldar las demás; el resultado se devuelve por base.
 export async function respaldarBasesDatosMssql(
@@ -712,6 +851,15 @@ export async function respaldarBasesDatosMssql(
     const tipos = new Set(resultados.filter((r) => r.estado !== 'error').map((r) => r.tipoEjecutado));
     const tipoResumen =
       tipos.size === 0 ? 'completo' : tipos.size > 1 ? 'mixto' : [...tipos][0];
+
+    // La retención se aplica solo cuando la ejecución generó algún respaldo.
+    if (resultados.some((resultado) => resultado.estado !== 'error')) {
+      try {
+        await depurarRespaldosAntiguos(pool, respaldo, destino);
+      } catch (error) {
+        logger.warn('No se pudieron depurar los respaldos antiguos', error);
+      }
+    }
 
     return { resultados, tipoResumen };
   } finally {
@@ -1219,7 +1367,7 @@ export async function inventariarArchivosBak(
       carpeta,
       archivos,
       advertencia:
-        'Solo se listan los backups registrados en msdb dentro de esta carpeta. Puede haber archivos no registrados; esta lista no autoriza a borrar nada y la app no elimina archivos automáticamente.',
+        'Solo se listan los backups registrados en msdb dentro de esta carpeta. La retención de la tarea puede eliminar .bak y .zip antiguos al respaldar; esta lista es solo de lectura.',
     };
   } finally {
     await pool.close().catch(() => undefined);

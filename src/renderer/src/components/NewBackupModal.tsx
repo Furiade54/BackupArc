@@ -171,6 +171,10 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
           return 'La antigüedad máxima del full debe ser un entero entre 1 y 365 días.';
         }
 
+        if (!Number.isInteger(retencionDias) || retencionDias < 1 || retencionDias > 3650) {
+          return 'La retención debe ser un número entero entre 1 y 3650 días.';
+        }
+
         return null;
       }
 
@@ -732,6 +736,25 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                       </div>
                     )}
 
+                    <div className="campo">
+                      <label htmlFor="backup-retencion-mssql">Retención de los respaldos (días)</label>
+                      <input
+                        id="backup-retencion-mssql"
+                        type="number"
+                        min={1}
+                        max={3650}
+                        step={1}
+                        value={retencion}
+                        disabled={guardando}
+                        onChange={(evento) => setRetencion(evento.target.value)}
+                      />
+                      <span className="campo__ayuda">
+                        Al terminar cada respaldo se eliminan de la carpeta destino los .bak y .zip
+                        con antigüedad mayor. Siempre se conserva el respaldo más reciente de cada
+                        base y el full que usan los diferenciales.
+                      </span>
+                    </div>
+
                     <div className="campo__casillas">
                       <label className="campo__casilla">
                         <input
@@ -791,8 +814,9 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                     )}
 
                     <p className="campo__aviso" role="note">
-                      Los .bak se guardan en el servidor SQL y no se borran automáticamente desde la
-                      app.
+                      Los .bak se guardan en el servidor SQL. La retención se aplica al terminar
+                      cada respaldo; el más reciente y el full base de los diferenciales nunca se
+                      eliminan.
                     </p>
                   </>
                 ) : (

@@ -739,6 +739,38 @@
   white-space: nowrap;
 }
 
+/* Fila del .zip con su propio botón para abrir la carpeta donde se guardó. */
+.resultados-base__zip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.resultados-base__zip .resultados-base__archivo {
+  margin: 0;
+  min-width: 0;
+}
+
+.resultados-base__abrir {
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--texto-suave);
+  cursor: pointer;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+
+.resultados-base__abrir:hover,
+.resultados-base__abrir:focus-visible {
+  color: var(--acento);
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .resultados-base__detalle {
   margin: 3px 0 0;
   color: var(--aviso);

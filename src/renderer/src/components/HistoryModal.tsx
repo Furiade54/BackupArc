@@ -41,6 +41,12 @@ function nombreDeRuta(ruta: string): string {
   return partes[partes.length - 1] || ruta;
 }
 
+function carpetaDeRuta(ruta: string): string {
+  const corte = Math.max(ruta.lastIndexOf('\\'), ruta.lastIndexOf('/'));
+
+  return corte > 0 ? ruta.slice(0, corte) : ruta;
+}
+
 const ETIQUETAS_COMPRESION = {
   aplicada: 'comprimido',
   'no aplicada': 'sin comprimir',
@@ -107,6 +113,26 @@ export function HistoryModal({ respaldo, alCerrar }: HistoryModalProps) {
       }
     } catch {
       setAvisoApertura('No se pudo abrir la carpeta destino.');
+    }
+  };
+
+  // Abre la carpeta del .zip generado. Es independiente del destino del .bak:
+  // la app pudo comprimir en otra ruta configurada en la tarea.
+  const abrirCarpetaZip = async (ruta: string | null) => {
+    if (!ruta) {
+      return;
+    }
+
+    setAvisoApertura(null);
+
+    try {
+      const resultado = await window.api.sistema.abrirRuta(carpetaDeRuta(ruta));
+
+      if (!resultado.ok) {
+        setAvisoApertura(resultado.error);
+      }
+    } catch {
+      setAvisoApertura('No se pudo abrir la carpeta del .zip.');
     }
   };
 
@@ -196,11 +222,7 @@ export function HistoryModal({ respaldo, alCerrar }: HistoryModalProps) {
         )}
         <div>
           <dt>Retención</dt>
-          <dd>
-            {respaldo.tipo === 'mssql'
-              ? 'No se borra automáticamente'
-              : `${respaldo.retencionDias} días`}
-          </dd>
+          <dd>{respaldo.retencionDias} días</dd>
         </div>
         <div>
           <dt>Última ejecución</dt>
@@ -298,12 +320,29 @@ export function HistoryModal({ respaldo, alCerrar }: HistoryModalProps) {
                         )}
 
                         {resultado.archivoZip && (
-                          <p className="resultados-base__archivo" title={resultado.archivoZip}>
-                            ZIP: {nombreDeRuta(resultado.archivoZip)}
-                            {resultado.tamanoZipBytes !== null
-                              ? ` · ${formatearTamano(resultado.tamanoZipBytes)}`
-                              : ''}
-                          </p>
+                          <div className="resultados-base__zip">
+                            <p className="resultados-base__archivo" title={resultado.archivoZip}>
+                              ZIP: {nombreDeRuta(resultado.archivoZip)}
+                              {resultado.tamanoZipBytes !== null
+                                ? ` · ${formatearTamano(resultado.tamanoZipBytes)}`
+                                : ''}
+                            </p>
+                            <button
+                              type="button"
+                              className="resultados-base__abrir"
+                              title="Abrir la carpeta del .zip"
+                              aria-label="Abrir la carpeta del .zip"
+                              onClick={(evento) => {
+                                // La fila completa abre el destino del .bak:
+                                // este botón no debe disparar esa acción.
+                                evento.stopPropagation();
+                                void abrirCarpetaZip(resultado.archivoZip);
+                              }}
+                              onKeyDown={(evento) => evento.stopPropagation()}
+                            >
+                              <IconoCarpeta />
+                            </button>
+                          </div>
                         )}
 
                         {resultado.tipoEjecutado === 'diferencial' && resultado.baseArchivo && (
