@@ -138,6 +138,8 @@ export interface ApiElectron {
     eliminar: (id: number) => Promise<ResultadoIpc<void>>;
     establecerActivo: (id: number, habilitado: boolean) => Promise<ResultadoIpc<void>>;
     historial: (id: number) => Promise<ResultadoIpc<EjecucionRespaldo[]>>;
+    /** Borra el historial de la tarea y devuelve cuántas ejecuciones eliminó. */
+    limpiarHistorial: (id: number) => Promise<ResultadoIpc<number>>;
     inventarioBak: (id: number) => Promise<ResultadoIpc<InventarioBak>>;
     informeBak: (id: number, filtro: FiltroInformeBak) => Promise<ResultadoIpc<InformeBak>>;
     informeGlobal: (filtro: FiltroInformeBak) => Promise<ResultadoIpc<InformeGlobalBak>>;

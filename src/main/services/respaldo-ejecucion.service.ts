@@ -10,6 +10,7 @@ import type {
 import {
   actualizarEstadoRespaldo,
   calcularSiguienteEjecucion,
+  depurarHistorialAntiguo,
   listarRespaldosVencidos,
   normalizarProximasEjecuciones,
   obtenerRespaldo,
@@ -333,8 +334,22 @@ async function ejecutarRespaldoInterno(respaldo: RespaldoConfigurado): Promise<v
 
     throw error;
   } finally {
+    depurarHistorialSeguro(respaldo);
     enEjecucion.delete(respaldo.id);
     notificarCambioEjecucion(respaldo.id, false);
+  }
+}
+
+// La retención de la tarea también aplica al historial guardado en la base local.
+function depurarHistorialSeguro(respaldo: RespaldoConfigurado): void {
+  try {
+    const borradas = depurarHistorialAntiguo(respaldo.id, respaldo.retencionDias);
+
+    if (borradas > 0) {
+      logger.info(`Historial de "${respaldo.nombre}" depurado`, { ejecuciones: borradas });
+    }
+  } catch (error) {
+    logger.warn(`No se pudo depurar el historial de "${respaldo.nombre}"`, error);
   }
 }
 

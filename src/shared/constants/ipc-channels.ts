@@ -30,6 +30,7 @@ export const IPC_CHANNELS = {
   RESPALDOS_ELIMINAR: 'respaldos:eliminar',
   RESPALDOS_ESTABLECER_ACTIVO: 'respaldos:establecer-activo',
   RESPALDOS_HISTORIAL: 'respaldos:historial',
+  RESPALDOS_LIMPIAR_HISTORIAL: 'respaldos:limpiar-historial',
   RESPALDOS_INVENTARIO_BAK: 'respaldos:inventario-bak',
   RESPALDOS_INFORME_BAK: 'respaldos:informe-bak',
   RESPALDOS_INFORME_GLOBAL: 'respaldos:informe-global',

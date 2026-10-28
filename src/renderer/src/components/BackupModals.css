@@ -432,6 +432,78 @@
   font-size: var(--texto-xs);
 }
 
+.campo__etiqueta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Icono "i" que despliega un detalle opcional sin ocupar espacio permanente. */
+.campo__info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: none;
+  color: var(--texto-suave);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 10px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.campo__info:hover,
+.campo__info:focus-visible {
+  border-color: var(--acento);
+  color: var(--acento);
+}
+
+.campo__info:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 2px;
+}
+
+/* Globo flotante del icono "i": se dibuja en <body> para que el scroll del
+   asistente no lo recorte. */
+.campo__globo {
+  position: fixed;
+  z-index: 300;
+  width: 300px;
+  max-width: calc(100vw - 24px);
+  padding: 10px 12px;
+  border: 1px solid var(--borde-fuerte);
+  border-left: 3px solid var(--acento);
+  border-radius: 8px;
+  background: var(--fondo-panel);
+  color: var(--texto-suave);
+  font-size: var(--texto-xs);
+  line-height: 1.5;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.45);
+  transform: translateY(-100%);
+  pointer-events: none;
+  animation: globo-aparecer 110ms ease-out;
+}
+
+.campo__globo--abajo {
+  transform: none;
+}
+
+@keyframes globo-aparecer {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
 /* Advertencia visible: la ruta destino vive en el servidor SQL, no en este equipo. */
 .campo__aviso {
   margin: 0;
@@ -563,6 +635,49 @@
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.historial__cabecera {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.historial__cabecera .historial__titulo {
+  margin: 0;
+}
+
+.historial__confirmacion {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  color: var(--texto-suave);
+  font-size: var(--texto-xs);
+}
+
+.boton-texto {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--texto-suave);
+  font-size: var(--texto-xs);
+  cursor: pointer;
+}
+
+.boton-texto:hover:not(:disabled) {
+  color: var(--texto);
+  text-decoration: underline;
+}
+
+.boton-texto:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.boton-texto--peligro {
+  color: var(--error);
 }
 
 .historial {

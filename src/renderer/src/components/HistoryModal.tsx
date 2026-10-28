@@ -67,6 +67,8 @@ export function HistoryModal({ respaldo, alCerrar }: HistoryModalProps) {
   const [inventario, setInventario] = useState<InventarioBak | null>(null);
   const [cargandoInventario, setCargandoInventario] = useState(false);
   const [errorInventario, setErrorInventario] = useState<string | null>(null);
+  const [confirmandoLimpieza, setConfirmandoLimpieza] = useState(false);
+  const [limpiandoHistorial, setLimpiandoHistorial] = useState(false);
   // La carpeta de un servidor remoto no existe en este equipo.
   const esRemoto = respaldo.tipo === 'mssql' && respaldo.conexionMssql?.esRemoto === true;
   const puedeAbrirDestino = !esRemoto;
@@ -133,6 +135,27 @@ export function HistoryModal({ respaldo, alCerrar }: HistoryModalProps) {
       }
     } catch {
       setAvisoApertura('No se pudo abrir la carpeta del .zip.');
+    }
+  };
+
+  // Borra el historial de esta tarea. No toca los .bak/.zip del disco.
+  const limpiarHistorial = async () => {
+    setLimpiandoHistorial(true);
+    setError(null);
+
+    try {
+      const resultado = await window.api.respaldos.limpiarHistorial(respaldo.id);
+
+      if (resultado.ok) {
+        setEjecuciones([]);
+        setConfirmandoLimpieza(false);
+      } else {
+        setError(resultado.error);
+      }
+    } catch {
+      setError('No se pudo limpiar el historial.');
+    } finally {
+      setLimpiandoHistorial(false);
     }
   };
 
@@ -240,7 +263,43 @@ export function HistoryModal({ respaldo, alCerrar }: HistoryModalProps) {
         </p>
       )}
 
-      <h3 className="historial__titulo">Ejecuciones registradas</h3>
+      <div className="historial__cabecera">
+        <h3 className="historial__titulo">Ejecuciones registradas</h3>
+
+        {ejecuciones !== null &&
+          ejecuciones.length > 0 &&
+          (confirmandoLimpieza ? (
+            <div className="historial__confirmacion">
+              <span>
+                ¿Borrar {ejecuciones.length} {ejecuciones.length === 1 ? 'registro' : 'registros'}?
+              </span>
+              <button
+                type="button"
+                className="boton-texto boton-texto--peligro"
+                disabled={limpiandoHistorial}
+                onClick={() => void limpiarHistorial()}
+              >
+                {limpiandoHistorial ? 'Borrando…' : 'Borrar'}
+              </button>
+              <button
+                type="button"
+                className="boton-texto"
+                disabled={limpiandoHistorial}
+                onClick={() => setConfirmandoLimpieza(false)}
+              >
+                Cancelar
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="boton-texto"
+              onClick={() => setConfirmandoLimpieza(true)}
+            >
+              Limpiar historial
+            </button>
+          ))}
+      </div>
 
       {error && (
         <p className="formulario__error" role="alert">

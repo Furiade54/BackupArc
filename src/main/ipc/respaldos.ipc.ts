@@ -18,6 +18,7 @@ import {
   crearRespaldo,
   eliminarRespaldo,
   establecerActivoRespaldo,
+  limpiarHistorialRespaldo,
   listarHistorialRespaldo,
   listarRespaldos,
   obtenerRespaldo,
@@ -411,6 +412,18 @@ export function registrarIpcRespaldos(): void {
       try {
         validarRemitente(evento);
         return { ok: true, datos: listarHistorialRespaldo(validarId(id)) };
+      } catch (error) {
+        return { ok: false, error: mensajeError(error) };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.RESPALDOS_LIMPIAR_HISTORIAL,
+    (evento, id: unknown): ResultadoIpc<number> => {
+      try {
+        validarRemitente(evento);
+        return { ok: true, datos: limpiarHistorialRespaldo(validarId(id)) };
       } catch (error) {
         return { ok: false, error: mensajeError(error) };
       }

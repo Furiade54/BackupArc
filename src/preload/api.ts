@@ -99,6 +99,7 @@ export const api: ApiElectron = {
     establecerActivo: (id, habilitado) =>
       ipcRenderer.invoke(IPC_CHANNELS.RESPALDOS_ESTABLECER_ACTIVO, id, habilitado),
     historial: (id) => ipcRenderer.invoke(IPC_CHANNELS.RESPALDOS_HISTORIAL, id),
+    limpiarHistorial: (id) => ipcRenderer.invoke(IPC_CHANNELS.RESPALDOS_LIMPIAR_HISTORIAL, id),
     inventarioBak: (id) => ipcRenderer.invoke(IPC_CHANNELS.RESPALDOS_INVENTARIO_BAK, id),
     informeBak: (id, filtro) =>
       ipcRenderer.invoke(IPC_CHANNELS.RESPALDOS_INFORME_BAK, id, filtro),

@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import type { ConfiguracionMssql } from '../../../shared/types/api.types';
 import type {
   ModoRespaldoMssql,
@@ -79,6 +80,8 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
     respaldo?.carpetaTemporalLectura ?? '',
   );
   const [carpetaZip, setCarpetaZip] = useState(respaldo?.carpetaZip ?? '');
+  // Globo flotante que explica por qué el .zip usa una ruta distinta.
+  const [globoZip, setGloboZip] = useState<{ x: number; y: number; abajo: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [indicePaso, setIndicePaso] = useState(0);
@@ -293,6 +296,16 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
     } finally {
       setGuardando(false);
     }
+  };
+
+  // Muestra el globo sobre el icono; si no cabe arriba, lo coloca debajo.
+  const mostrarGloboZip = (elemento: HTMLElement) => {
+    const rect = elemento.getBoundingClientRect();
+    const ancho = 300;
+    const x = Math.min(Math.max(12, rect.left - 8), window.innerWidth - ancho - 12);
+    const abajo = rect.top < 140;
+
+    setGloboZip({ x, y: abajo ? rect.bottom + 8 : rect.top - 8, abajo });
   };
 
   const avanzar = (evento: FormEvent<HTMLFormElement>) => {
@@ -765,8 +778,9 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                       />
                       <span className="campo__ayuda">
                         Al terminar cada respaldo se eliminan de la carpeta destino los .bak y .zip
-                        con antigüedad mayor. Siempre se conserva el respaldo más reciente de cada
-                        base y el full que usan los diferenciales.
+                        con antigüedad mayor, y se depura el historial de la tarea. Siempre se
+                        conserva el respaldo más reciente de cada base y el full que usan los
+                        diferenciales.
                       </span>
                     </div>
 
@@ -800,7 +814,39 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
 
                     {comprimirBak && (
                       <div className="campo">
-                        <label htmlFor="backup-carpeta-zip">Carpeta del .zip (opcional)</label>
+                        <div className="campo__etiqueta">
+                          <label htmlFor="backup-carpeta-zip">Carpeta del .zip (opcional)</label>
+                          <button
+                            type="button"
+                            className="campo__info"
+                            aria-label="Por qué el .zip usa una ruta distinta"
+                            aria-describedby={globoZip ? 'info-carpeta-zip' : undefined}
+                            onMouseEnter={(evento) => mostrarGloboZip(evento.currentTarget)}
+                            onMouseLeave={() => setGloboZip(null)}
+                            onFocus={(evento) => mostrarGloboZip(evento.currentTarget)}
+                            onBlur={() => setGloboZip(null)}
+                          >
+                            i
+                          </button>
+                          {globoZip &&
+                            createPortal(
+                              <div
+                                id="info-carpeta-zip"
+                                role="tooltip"
+                                className={`campo__globo${
+                                  globoZip.abajo ? ' campo__globo--abajo' : ''
+                                }`}
+                                style={{ left: globoZip.x, top: globoZip.y }}
+                              >
+                                El .bak lo escribe SQL Server en el disco del servidor; el .zip lo
+                                escribe esta app en tu equipo. Separarlas permite dejar los .bak
+                                grandes en el servidor y los .zip en una carpeta local o de red,
+                                aplicar retenciones distintas y conservar el .bak intacto si la
+                                compresión falla.
+                              </div>,
+                              document.body,
+                            )}
+                        </div>
                         <div className="campo__ruta">
                           <input
                             id="backup-carpeta-zip"
@@ -863,12 +909,13 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                         max={3650}
                         step={1}
                         value={retencion}
-                        disabled={guardando || !copiaConFecha}
+                        disabled={guardando}
                         onChange={(evento) => setRetencion(evento.target.value)}
                       />
                       {!copiaConFecha && (
                         <span className="campo__ayuda">
-                          No aplica cuando la copia sobrescribe la anterior.
+                          Las copias se sobrescriben, pero el historial de la tarea se depura con
+                          estos días.
                         </span>
                       )}
                     </div>

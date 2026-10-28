@@ -544,6 +544,30 @@ export function establecerActivoRespaldo(id: number, habilitado: boolean): void 
   }
 }
 
+// Borra todas las ejecuciones de una tarea. Los resultados por base caen por
+// la clave foránea en cascada; los archivos .bak/.zip no se tocan.
+export function limpiarHistorialRespaldo(id: number): number {
+  const resultado = obtenerBaseDatosLocal()
+    .prepare('DELETE FROM ejecuciones_respaldo WHERE respaldo_id = ?')
+    .run(id);
+
+  return Number(resultado.changes);
+}
+
+// Depura el historial que supera la retención de la tarea.
+export function depurarHistorialAntiguo(id: number, dias: number): number {
+  if (!Number.isInteger(dias) || dias < 1) {
+    return 0;
+  }
+
+  const limite = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString();
+  const resultado = obtenerBaseDatosLocal()
+    .prepare('DELETE FROM ejecuciones_respaldo WHERE respaldo_id = ? AND fecha < ?')
+    .run(id, limite);
+
+  return Number(resultado.changes);
+}
+
 export function listarHistorialRespaldo(id: number): EjecucionRespaldo[] {
   const baseDatos = obtenerBaseDatosLocal();
   const existe = baseDatos.prepare('SELECT 1 AS existe FROM respaldos WHERE id = ?').get(id) as
