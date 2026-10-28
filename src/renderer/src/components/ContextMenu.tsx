@@ -2,7 +2,17 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import './ContextMenu.css';
 
-export type TipoOpcionMenu = 'ejecutar' | 'editar' | 'historial' | 'pausar' | 'activar' | 'eliminar';
+export type TipoOpcionMenu =
+  | 'ejecutar'
+  | 'editar'
+  | 'historial'
+  | 'pausar'
+  | 'activar'
+  | 'eliminar'
+  | 'nuevo'
+  | 'informes'
+  | 'actualizar'
+  | 'configuracion';
 
 export interface OpcionMenu {
   tipo: TipoOpcionMenu;
@@ -15,6 +25,8 @@ interface ContextMenuProps {
   x: number;
   y: number;
   opciones: OpcionMenu[];
+  /** Se anuncia a los lectores de pantalla al enfocar el menú. */
+  descripcion?: string;
   alCerrar: () => void;
 }
 
@@ -26,6 +38,57 @@ function Icono({ tipo }: { tipo: TipoOpcionMenu }) {
       <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
         <circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
         <path d="M6.6 5.6 10.2 8l-3.6 2.4z" fill="currentColor" />
+      </svg>
+    );
+  }
+
+  if (tipo === 'nuevo') {
+    return (
+      <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M8 3.5v9M3.5 8h9" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (tipo === 'informes') {
+    return (
+      <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
+        <path
+          d="M3.5 12.5V8M8 12.5V4M12.5 12.5V6.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.3"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+
+  if (tipo === 'actualizar') {
+    return (
+      <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
+        <path
+          d="M13 8a5 5 0 1 1-1.5-3.6M13 3v3h-3"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
+  if (tipo === 'configuracion') {
+    return (
+      <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
+        <path
+          d="M3 5.5h10M3 10.5h10M6.4 3.4v4.2M9.6 8.4v4.2"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+        />
       </svg>
     );
   }
@@ -90,7 +153,7 @@ function Icono({ tipo }: { tipo: TipoOpcionMenu }) {
   );
 }
 
-export function ContextMenu({ x, y, opciones, alCerrar }: ContextMenuProps) {
+export function ContextMenu({ x, y, opciones, descripcion, alCerrar }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [posicion, setPosicion] = useState<{ x: number; y: number } | null>(null);
   const alCerrarRef = useRef(alCerrar);
@@ -186,7 +249,7 @@ export function ContextMenu({ x, y, opciones, alCerrar }: ContextMenuProps) {
       ref={menuRef}
       className="menu-contextual"
       role="menu"
-      aria-label="Acciones de la copia"
+      aria-label={descripcion ?? 'Acciones de la copia'}
       style={{
         left: posicion?.x ?? x,
         top: posicion?.y ?? y,

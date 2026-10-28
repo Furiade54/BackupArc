@@ -41,7 +41,7 @@ function App() {
   const [respaldoHistorial, setRespaldoHistorial] = useState<RespaldoConfigurado | null>(null);
   const [respaldoEliminar, setRespaldoEliminar] = useState<RespaldoConfigurado | null>(null);
   const [menuContextual, setMenuContextual] = useState<{
-    respaldo: RespaldoConfigurado;
+    respaldo: RespaldoConfigurado | null;
     x: number;
     y: number;
   } | null>(null);
@@ -209,6 +209,11 @@ function App() {
     [],
   );
 
+  // El fondo de la ventana ofrece las acciones generales de la sección.
+  const abrirMenuFondo = useCallback((posicion: { x: number; y: number }) => {
+    setMenuContextual({ respaldo: null, x: posicion.x, y: posicion.y });
+  }, []);
+
   const alEjecutarAhora = useCallback(
     async (respaldo: RespaldoConfigurado) => {
       const respuesta = await window.api.respaldos.ejecutar(respaldo.id);
@@ -285,38 +290,70 @@ function App() {
   }, [info?.version]);
 
   let opcionesMenu: OpcionMenu[] = [];
+  let descripcionMenu = 'Acciones de la copia';
 
   if (menuContextual) {
     const { respaldo } = menuContextual;
 
-    opcionesMenu = [
-      {
-        tipo: 'ejecutar',
-        etiqueta: 'Ejecutar ahora',
-        alSeleccionar: () => void alEjecutarAhora(respaldo),
-      },
-      {
-        tipo: 'editar',
-        etiqueta: 'Editar tarea',
-        alSeleccionar: () => setRespaldoEditar(respaldo),
-      },
-      {
-        tipo: 'historial',
-        etiqueta: 'Ver historial',
-        alSeleccionar: () => setRespaldoHistorial(respaldo),
-      },
-      {
-        tipo: respaldo.habilitado ? 'pausar' : 'activar',
-        etiqueta: respaldo.habilitado ? 'Deshabilitar tarea' : 'Habilitar tarea',
-        alSeleccionar: () => void alAlternarActivo(respaldo),
-      },
-      {
-        tipo: 'eliminar',
-        etiqueta: 'Eliminar tarea',
-        separadorAntes: true,
-        alSeleccionar: () => setRespaldoEliminar(respaldo),
-      },
-    ];
+    if (!respaldo) {
+      descripcionMenu = 'Acciones generales';
+      opcionesMenu = [
+        {
+          tipo: 'nuevo',
+          etiqueta: 'Nueva tarea de backup',
+          alSeleccionar: abrirNuevaCopia,
+        },
+        {
+          tipo: 'informes',
+          etiqueta:
+            seccionActiva === 'seccion-informes' ? 'Ir a copias' : 'Ver informes',
+          alSeleccionar: () =>
+            navegarASeccion(
+              seccionActiva === 'seccion-informes' ? 'seccion-copias' : 'seccion-informes',
+            ),
+        },
+        {
+          tipo: 'actualizar',
+          etiqueta: 'Actualizar lista',
+          alSeleccionar: () => void recargarRespaldos(),
+        },
+        {
+          tipo: 'configuracion',
+          etiqueta: 'Configuración avanzada',
+          separadorAntes: true,
+          alSeleccionar: () => setModalConfiguracionAbierto(true),
+        },
+      ];
+    } else {
+      opcionesMenu = [
+        {
+          tipo: 'ejecutar',
+          etiqueta: 'Ejecutar ahora',
+          alSeleccionar: () => void alEjecutarAhora(respaldo),
+        },
+        {
+          tipo: 'editar',
+          etiqueta: 'Editar tarea',
+          alSeleccionar: () => setRespaldoEditar(respaldo),
+        },
+        {
+          tipo: 'historial',
+          etiqueta: 'Ver historial',
+          alSeleccionar: () => setRespaldoHistorial(respaldo),
+        },
+        {
+          tipo: respaldo.habilitado ? 'pausar' : 'activar',
+          etiqueta: respaldo.habilitado ? 'Deshabilitar tarea' : 'Habilitar tarea',
+          alSeleccionar: () => void alAlternarActivo(respaldo),
+        },
+        {
+          tipo: 'eliminar',
+          etiqueta: 'Eliminar tarea',
+          separadorAntes: true,
+          alSeleccionar: () => setRespaldoEliminar(respaldo),
+        },
+      ];
+    }
   }
 
   return (
@@ -340,7 +377,14 @@ function App() {
           alAbrirConfiguracion={() => setModalConfiguracionAbierto(true)}
         />
 
-        <div className="app" ref={contenedorRef}>
+        <div
+          className="app"
+          ref={contenedorRef}
+          onContextMenu={(evento) => {
+            evento.preventDefault();
+            abrirMenuFondo({ x: evento.clientX, y: evento.clientY });
+          }}
+        >
           <h1 className="solo-lectores">{TITULOS_SECCION[seccionActiva] ?? 'Copias de seguridad'}</h1>
 
           {seccionActiva === 'seccion-informes' ? (
@@ -416,6 +460,7 @@ function App() {
           x={menuContextual.x}
           y={menuContextual.y}
           opciones={opcionesMenu}
+          descripcion={descripcionMenu}
           alCerrar={() => setMenuContextual(null)}
         />
       )}

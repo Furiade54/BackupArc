@@ -844,7 +844,7 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                         disabled={guardando}
                         onChange={(evento) => setComprimir(evento.target.value === 'zip')}
                       >
-                        <option value="carpeta">Carpeta descomprimida</option>
+                        <option value="carpeta">Sin comprimir</option>
                         <option value="zip">Archivo .zip</option>
                       </select>
                       <span className="campo__ayuda">

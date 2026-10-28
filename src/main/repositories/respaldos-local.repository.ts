@@ -745,7 +745,7 @@ export function consultarResumenZip(
       FROM (
         SELECT r.tamano_zip_bytes,
                ROW_NUMBER() OVER (
-                 PARTITION BY r.respaldo_id, r.base_datos
+                 PARTITION BY e.respaldo_id, r.base_datos
                  ORDER BY e.fecha DESC, r.id DESC
                ) AS orden
         FROM resultados_respaldo r

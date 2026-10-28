@@ -135,6 +135,8 @@ export function BackupCard({
       aria-busy={ejecutando}
       onContextMenu={(evento) => {
         evento.preventDefault();
+        // Evita que el menú de la tarjeta sea reemplazado por el del fondo.
+        evento.stopPropagation();
         alAbrirMenuContextual(respaldo, { x: evento.clientX, y: evento.clientY });
       }}
       onDoubleClick={(evento) => {
