@@ -137,6 +137,7 @@ export function inicializarBaseDatosLocal(): void {
       hora_ejecucion TEXT NOT NULL,
       retencion_dias INTEGER NOT NULL,
       copia_con_fecha INTEGER NOT NULL DEFAULT 1,
+      identificador_unico INTEGER NOT NULL DEFAULT 1,
       comprimir INTEGER NOT NULL DEFAULT 0,
       mssql_conexion TEXT,
       habilitado INTEGER NOT NULL DEFAULT 1,
@@ -178,6 +179,10 @@ export function inicializarBaseDatosLocal(): void {
 
   if (!columnasRespaldos.some((columna) => columna.name === 'copia_con_fecha')) {
     conexion.exec('ALTER TABLE respaldos ADD COLUMN copia_con_fecha INTEGER NOT NULL DEFAULT 1');
+  }
+
+  if (!columnasRespaldos.some((columna) => columna.name === 'identificador_unico')) {
+    conexion.exec('ALTER TABLE respaldos ADD COLUMN identificador_unico INTEGER NOT NULL DEFAULT 1');
   }
 
   if (!columnasRespaldos.some((columna) => columna.name === 'comprimir')) {

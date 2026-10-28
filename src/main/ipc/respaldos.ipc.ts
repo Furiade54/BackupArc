@@ -296,6 +296,11 @@ function validarNuevoRespaldo(datos: unknown): NuevoRespaldo {
     horaEjecucion: validarHora(registro.horaEjecucion),
     retencionDias: validarRetencion(registro.retencionDias),
     copiaConFecha: validarBooleano(registro.copiaConFecha, 'copiaConFecha'),
+    // Las tareas anteriores no enviaban este campo: se conserva el nombre único.
+    identificadorUnico:
+      tipo === 'mssql' && registro.identificadorUnico !== undefined
+        ? validarBooleano(registro.identificadorUnico, 'identificadorUnico')
+        : true,
     // Un respaldo de base de datos ya se entrega como .bak en el servidor.
     comprimir: tipo === 'mssql' ? false : validarBooleano(registro.comprimir, 'comprimir'),
     modoMssql: tipo === 'mssql' ? validarModoMssql(registro.modoMssql) : 'completo',

@@ -41,6 +41,8 @@ export interface RespaldoConfigurado {
   horaEjecucion: string;
   retencionDias: number;
   copiaConFecha: boolean;
+  /** Añade el runId al nombre del .bak; si es falso, la copia se sobrescribe. */
+  identificadorUnico: boolean;
   comprimir: boolean;
   /** Solo aplica a tareas MSSQL. */
   modoMssql: ModoRespaldoMssql;
@@ -77,6 +79,7 @@ export interface NuevoRespaldo {
   horaEjecucion: string;
   retencionDias: number;
   copiaConFecha: boolean;
+  identificadorUnico: boolean;
   comprimir: boolean;
   modoMssql: ModoRespaldoMssql;
   fullCadaDias: number;

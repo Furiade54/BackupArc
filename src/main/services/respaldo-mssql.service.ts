@@ -594,8 +594,11 @@ function nombreBak(
   const marca = respaldo.copiaConFecha ? `_${marcaTiempo(fecha)}` : '';
 
   // El runId garantiza que nunca se sobrescriba un .bak existente, incluso
-  // con dos tareas o dos ejecuciones simultáneas.
-  return `${nombre}${marca}_${etiqueta}_${runId}.bak`;
+  // con dos tareas o dos ejecuciones simultáneas. Si el usuario lo desactiva,
+  // el nombre queda fijo por base y tipo y cada ejecución reemplaza el archivo.
+  const sufijoUnico = respaldo.identificadorUnico ? `_${runId}` : '';
+
+  return `${nombre}${marca}_${etiqueta}${sufijoUnico}.bak`;
 }
 
 function empaquetarArchivo(ruta: string, rutaSalida: string): Promise<void> {

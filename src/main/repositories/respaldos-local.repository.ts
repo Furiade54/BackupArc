@@ -34,6 +34,7 @@ interface FilaRespaldo {
   hora_ejecucion: string;
   retencion_dias: number;
   copia_con_fecha: number;
+  identificador_unico: number;
   comprimir: number;
   modo_mssql: string;
   full_cada_dias: number;
@@ -137,6 +138,7 @@ function mapearRespaldo(fila: FilaRespaldo): RespaldoConfigurado {
     horaEjecucion: fila.hora_ejecucion,
     retencionDias: fila.retencion_dias,
     copiaConFecha: fila.copia_con_fecha === 1,
+    identificadorUnico: fila.identificador_unico === 1,
     comprimir: fila.comprimir === 1,
     modoMssql: esModoMssql(fila.modo_mssql) ? fila.modo_mssql : 'completo',
     fullCadaDias: fila.full_cada_dias,
@@ -246,6 +248,7 @@ export function crearRespaldo(datos: NuevoRespaldo): RespaldoConfigurado {
         hora_ejecucion,
         retencion_dias,
         copia_con_fecha,
+        identificador_unico,
         comprimir,
         modo_mssql,
         full_cada_dias,
@@ -260,7 +263,7 @@ export function crearRespaldo(datos: NuevoRespaldo): RespaldoConfigurado {
         proxima_ejecucion,
         ultimo_estado,
         creado_en
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'pendiente', ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'pendiente', ?)
     `)
     .run(
       datos.nombre,
@@ -271,6 +274,7 @@ export function crearRespaldo(datos: NuevoRespaldo): RespaldoConfigurado {
       datos.horaEjecucion,
       datos.retencionDias,
       datos.copiaConFecha ? 1 : 0,
+      datos.identificadorUnico ? 1 : 0,
       datos.comprimir ? 1 : 0,
       datos.modoMssql,
       datos.fullCadaDias,
@@ -327,6 +331,7 @@ export function actualizarRespaldo(id: number, datos: NuevoRespaldo): RespaldoCo
           hora_ejecucion = ?,
           retencion_dias = ?,
           copia_con_fecha = ?,
+          identificador_unico = ?,
           comprimir = ?,
           modo_mssql = ?,
           full_cada_dias = ?,
@@ -349,6 +354,7 @@ export function actualizarRespaldo(id: number, datos: NuevoRespaldo): RespaldoCo
       datos.horaEjecucion,
       datos.retencionDias,
       datos.copiaConFecha ? 1 : 0,
+      datos.identificadorUnico ? 1 : 0,
       datos.comprimir ? 1 : 0,
       datos.modoMssql,
       datos.fullCadaDias,

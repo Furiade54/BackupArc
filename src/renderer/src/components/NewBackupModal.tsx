@@ -61,6 +61,9 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
   const [hora, setHora] = useState(respaldo?.horaEjecucion ?? '03:00');
   const [retencion, setRetencion] = useState(String(respaldo?.retencionDias ?? 7));
   const [copiaConFecha, setCopiaConFecha] = useState(respaldo?.copiaConFecha ?? true);
+  const [identificadorUnico, setIdentificadorUnico] = useState(
+    respaldo?.identificadorUnico ?? true,
+  );
   const [comprimir, setComprimir] = useState(respaldo?.comprimir ?? false);
   const [modoMssql, setModoMssql] = useState<ModoRespaldoMssql>(
     respaldo?.modoMssql ?? 'completo',
@@ -109,6 +112,8 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
   const esMssql = tipo === 'mssql';
   const retencionDias = Number(retencion);
   const fullCadaDiasNumero = Number(fullCadaDias);
+  // Tres modos visibles: con fecha, sin fecha pero único, o nombre fijo.
+  const modoNombre = copiaConFecha ? 'fecha' : identificadorUnico ? 'unica' : 'fija';
 
   // En MSSQL el paso Opciones también aplica: modo, base full y verificación.
   const pasos = PASOS;
@@ -261,6 +266,7 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
         horaEjecucion: hora,
         retencionDias,
         copiaConFecha,
+        identificadorUnico: esMssql ? identificadorUnico : true,
         comprimir: esMssql ? false : comprimir,
         modoMssql: esMssql ? modoMssql : 'completo',
         fullCadaDias: esMssql ? fullCadaDiasNumero : 7,
@@ -666,9 +672,13 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                   <label htmlFor="backup-carpeta">Nombre de la copia</label>
                   <select
                     id="backup-carpeta"
-                    value={copiaConFecha ? 'fecha' : 'unica'}
+                    value={esMssql ? modoNombre : copiaConFecha ? 'fecha' : 'unica'}
                     disabled={guardando}
-                    onChange={(evento) => setCopiaConFecha(evento.target.value === 'fecha')}
+                    onChange={(evento) => {
+                      const valor = evento.target.value;
+                      setCopiaConFecha(valor === 'fecha');
+                      setIdentificadorUnico(valor !== 'fija');
+                    }}
                   >
                     <option value="fecha">Con fecha y hora (Documentos_20261022131100)</option>
                     <option value="unica">
@@ -676,12 +686,17 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                         ? 'Sin fecha en el nombre (sigue siendo único)'
                         : 'Sin fecha (sobrescribe la copia anterior)'}
                     </option>
+                    {esMssql && (
+                      <option value="fija">Nombre fijo (sobrescribe el .bak anterior)</option>
+                    )}
                   </select>
                   <span className="campo__ayuda">
                     {esMssql
-                      ? copiaConFecha
+                      ? modoNombre === 'fecha'
                         ? 'Cada ejecución crea un .bak nuevo con fecha, tipo (full/diff) e identificador único.'
-                        : 'El .bak se nombra sin fecha; el tipo y un identificador único evitan que se sobrescriba.'
+                        : modoNombre === 'unica'
+                          ? 'El .bak se nombra sin fecha; el tipo y un identificador único evitan que se sobrescriba.'
+                          : 'Sin identificador único: el .bak toma un nombre fijo por base y tipo y se reemplaza en cada ejecución. Un diferencial anterior ya no podrá restaurarse.'
                       : copiaConFecha
                         ? `Cada ejecución crea ${comprimir ? 'un .zip nuevo' : 'una copia nueva'} y la retención borra ${
                             comprimir ? 'los anteriores' : 'las anteriores'
