@@ -19,7 +19,7 @@ import type {
   TareaInformeGlobal,
   TipoEjecutadoMssql,
 } from '../../shared/types/respaldo.types';
-import { parsearBasesDatos } from '../../shared/utils/bases-datos';
+import { esBaseDeSistema, parsearBasesDatos } from '../../shared/utils/bases-datos';
 import {
   listarRespaldos,
   obtenerConexionMssqlRespaldo,
@@ -778,11 +778,20 @@ export async function respaldarBasesDatosMssql(
   fecha: Date,
   runId: string,
 ): Promise<ResultadoRespaldoMssql> {
-  const bases = parsearBasesDatos(respaldo.origen);
+  const solicitadas = parsearBasesDatos(respaldo.origen);
+  // Las bases del sistema no se respaldan; las tareas antiguas aún pueden tenerlas.
+  const bases = solicitadas.filter((base) => !esBaseDeSistema(base));
   const destino = respaldo.destino.trim();
 
+  if (bases.length !== solicitadas.length) {
+    logger.info('Bases del sistema omitidas en la tarea', {
+      tarea: respaldo.nombre,
+      bases: solicitadas.filter((base) => esBaseDeSistema(base)),
+    });
+  }
+
   if (bases.length === 0) {
-    throw new Error('Selecciona al menos una base de datos para respaldar.');
+    throw new Error('Selecciona al menos una base de datos de usuario para respaldar.');
   }
 
   if (!destino) {
@@ -827,17 +836,24 @@ export async function respaldarBasesDatosMssql(
       WHERE name <> 'tempdb' AND source_database_id IS NULL
     `);
     const estadoPorNombre = new Map(estados.recordset.map((fila) => [fila.name, fila.state_desc]));
-    const noDisponibles = bases.filter((base) => estadoPorNombre.get(base) !== 'ONLINE');
+    const disponibles = bases.filter((base) => estadoPorNombre.get(base) === 'ONLINE');
+    // Solo se respaldan las bases ONLINE; el resto queda constancia como omitida.
+    const omitidas = bases.filter((base) => estadoPorNombre.get(base) !== 'ONLINE');
 
-    if (noDisponibles.length > 0) {
+    if (disponibles.length === 0) {
       throw new Error(
-        `Estas bases no existen o no están disponibles en el servidor: ${noDisponibles.join(', ')}.`,
+        `Ninguna de las bases seleccionadas está ONLINE en el servidor: ${omitidas.join(', ')}.`,
       );
     }
 
-    const resultados: NuevoResultadoBaseRespaldo[] = [];
+    const resultados: NuevoResultadoBaseRespaldo[] = omitidas.map((base) =>
+      resultadoOmitidoBase(
+        base,
+        `Omitida: la base está ${estadoPorNombre.get(base) ?? 'no disponible'} en el servidor.`,
+      ),
+    );
 
-    for (const baseDatos of bases) {
+    for (const baseDatos of disponibles) {
       const resultado = await respaldarBase(
         pool,
         respaldo,
@@ -851,7 +867,11 @@ export async function respaldarBasesDatosMssql(
       resultados.push(resultado);
     }
 
-    const tipos = new Set(resultados.filter((r) => r.estado !== 'error').map((r) => r.tipoEjecutado));
+    const tipos = new Set(
+      resultados
+        .filter((resultado) => resultado.estado !== 'error' && resultado.archivo !== null)
+        .map((resultado) => resultado.tipoEjecutado),
+    );
     const tipoResumen =
       tipos.size === 0 ? 'completo' : tipos.size > 1 ? 'mixto' : [...tipos][0];
 
@@ -868,6 +888,25 @@ export async function respaldarBasesDatosMssql(
   } finally {
     await pool.close().catch(() => undefined);
   }
+}
+
+// Base que no se respaldó por estar fuera de línea o no existir en el servidor.
+function resultadoOmitidoBase(baseDatos: string, detalle: string): NuevoResultadoBaseRespaldo {
+  return {
+    baseDatos,
+    tipoEjecutado: 'completo',
+    archivo: null,
+    baseArchivo: null,
+    baseGuid: null,
+    baseLsn: null,
+    baseFecha: null,
+    tamanoBytes: null,
+    compresion: 'desconocido',
+    archivoZip: null,
+    tamanoZipBytes: null,
+    estado: 'advertencia',
+    detalle,
+  };
 }
 
 function resultadoErrorBase(

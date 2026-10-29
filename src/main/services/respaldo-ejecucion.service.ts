@@ -222,11 +222,14 @@ function notificarCambioEjecucion(id: number, enEjecucion: boolean): void {
 }
 
 function resumirResultadosMssql(resultados: NuevoResultadoBaseRespaldo[]): string {
-  const exitosos = resultados.filter((resultado) => resultado.estado !== 'error');
+  // Una base omitida no generó archivo: no cuenta como full ni como diferencial.
+  const omitidas = resultados.filter((resultado) => resultado.archivo === null);
+  const respaldadas = resultados.filter((resultado) => resultado.archivo !== null);
+  const exitosos = respaldadas.filter((resultado) => resultado.estado !== 'error');
   const completos = exitosos.filter((resultado) => resultado.tipoEjecutado === 'completo').length;
   const diferenciales = exitosos.length - completos;
   const advertencias = exitosos.filter((resultado) => resultado.estado === 'advertencia');
-  const errores = resultados.filter((resultado) => resultado.estado === 'error');
+  const errores = respaldadas.filter((resultado) => resultado.estado === 'error');
   const partes: string[] = [];
 
   if (completos > 0) {
@@ -241,6 +244,10 @@ function resumirResultadosMssql(resultados: NuevoResultadoBaseRespaldo[]): strin
 
   if (advertencias.length > 0) {
     resumen += ` · ${advertencias.length} con advertencia`;
+  }
+
+  if (omitidas.length > 0) {
+    resumen += ` · ${omitidas.length} omitida${omitidas.length === 1 ? '' : 's'}`;
   }
 
   if (errores.length > 0) {

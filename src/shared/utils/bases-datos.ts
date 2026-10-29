@@ -31,6 +31,13 @@ export function serializarBasesDatos(bases: string[]): string {
   );
 }
 
+// Bases del sistema: no se respaldan en las tareas programadas.
+const BASES_SISTEMA = new Set(['master', 'model', 'msdb', 'tempdb']);
+
+export function esBaseDeSistema(nombre: string): boolean {
+  return BASES_SISTEMA.has(nombre.trim().toLowerCase());
+}
+
 export function formatearBasesDatos(valor: string): string {
   const bases = parsearBasesDatos(valor);
 

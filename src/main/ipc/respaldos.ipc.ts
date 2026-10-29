@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels';
 import type { ResultadoIpc } from '../../shared/types/api.types';
+import { esBaseDeSistema } from '../../shared/utils/bases-datos';
 import type {
   ConexionMssql,
   EjecucionRespaldo,
@@ -218,7 +219,14 @@ function validarBasesDatos(valor: unknown): string {
     return nombre;
   });
 
-  return JSON.stringify(Array.from(new Set(nombres)));
+  // Las bases del sistema no se respaldan como tareas programadas.
+  const usuario = nombres.filter((nombre) => !esBaseDeSistema(nombre));
+
+  if (usuario.length === 0) {
+    throw new Error('Selecciona al menos una base de datos de usuario.');
+  }
+
+  return JSON.stringify(Array.from(new Set(usuario)));
 }
 
 function validarConexionMssql(valor: unknown): ConexionMssql | null {

@@ -360,17 +360,29 @@ export function HistoryModal({ respaldo, alCerrar }: HistoryModalProps) {
                     {ejecucion.resultados.map((resultado) => (
                       <li key={resultado.id} className="resultados-base__item">
                         <div className="resultados-base__cabecera">
-                          <span
-                            className={`resultados-base__tipo resultados-base__tipo--${resultado.tipoEjecutado}`}
-                          >
-                            {resultado.tipoEjecutado === 'diferencial' ? 'Diff' : 'Full'}
-                          </span>
+                          {resultado.archivo === null ? (
+                            <span className="resultados-base__tipo resultados-base__tipo--omitida">
+                              Omitida
+                            </span>
+                          ) : (
+                            <span
+                              className={`resultados-base__tipo resultados-base__tipo--${resultado.tipoEjecutado}`}
+                            >
+                              {resultado.tipoEjecutado === 'diferencial' ? 'Diff' : 'Full'}
+                            </span>
+                          )}
                           <span className="resultados-base__base">{resultado.baseDatos}</span>
-                          <span className="resultados-base__meta">
-                            {formatearTamano(resultado.tamanoBytes)} ·{' '}
-                            {ETIQUETAS_COMPRESION[resultado.compresion]}
-                          </span>
+                          {resultado.archivo !== null && (
+                            <span className="resultados-base__meta">
+                              {formatearTamano(resultado.tamanoBytes)} ·{' '}
+                              {ETIQUETAS_COMPRESION[resultado.compresion]}
+                            </span>
+                          )}
                         </div>
+
+                        {resultado.archivo === null && resultado.detalle && (
+                          <p className="resultados-base__archivo">{resultado.detalle}</p>
+                        )}
 
                         {resultado.archivo && (
                           <p className="resultados-base__archivo" title={resultado.archivo}>

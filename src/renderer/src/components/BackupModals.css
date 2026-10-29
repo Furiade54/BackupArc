@@ -827,6 +827,11 @@
   color: var(--acento);
 }
 
+.resultados-base__tipo--omitida {
+  border-color: color-mix(in srgb, var(--aviso) 45%, var(--borde));
+  color: var(--aviso);
+}
+
 .resultados-base__tipo--diferencial {
   border-color: color-mix(in srgb, var(--aviso) 45%, var(--borde));
   color: var(--aviso);

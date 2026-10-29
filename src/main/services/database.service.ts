@@ -229,7 +229,7 @@ export async function listarBasesDatos(
     const resultado = await pool.request().query<{ name: string; state_desc: string }>(`
       SELECT name, state_desc
       FROM sys.databases
-      WHERE name <> 'tempdb' AND source_database_id IS NULL
+      WHERE database_id > 4 AND source_database_id IS NULL
       ORDER BY name ASC
     `);
 

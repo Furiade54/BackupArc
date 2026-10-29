@@ -173,7 +173,8 @@ export function MssqlDatabasesModal({
             </ul>
 
             <span className="campo__ayuda">
-              Solo se pueden respaldar las bases en estado ONLINE.
+              Solo se respaldan las bases en estado ONLINE. Las bases del sistema (master, model,
+              msdb y tempdb) no se listan.
             </span>
 
             <div className="formulario__acciones">
