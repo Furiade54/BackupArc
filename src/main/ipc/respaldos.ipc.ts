@@ -299,6 +299,11 @@ function validarNuevoRespaldo(datos: unknown): NuevoRespaldo {
       tipo === 'mssql'
         ? validarBasesDatos(registro.origen)
         : validarTexto(registro.origen, 'origen', MAX_RUTA),
+    // Solo MSSQL: respalda todas las bases de usuario ONLINE en cada ejecución.
+    todasLasBases:
+      tipo === 'mssql' && registro.todasLasBases !== undefined
+        ? validarBooleano(registro.todasLasBases, 'todasLasBases')
+        : false,
     conexionMssql: tipo === 'mssql' ? conexionMssql : null,
     destino: validarTexto(registro.destino, 'destino', MAX_RUTA),
     frecuenciaMinutos: validarFrecuencia(registro.frecuenciaMinutos),

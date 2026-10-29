@@ -188,9 +188,11 @@ export function HistoryModal({ respaldo, alCerrar }: HistoryModalProps) {
         <div>
           <dt>{respaldo.tipo === 'mssql' ? 'Bases de datos' : 'Origen'}</dt>
           <dd title={respaldo.origen}>
-            {respaldo.tipo === 'mssql'
-              ? formatearBasesDatos(respaldo.origen)
-              : respaldo.origen}
+            {respaldo.tipo !== 'mssql'
+              ? respaldo.origen
+              : respaldo.todasLasBases
+                ? 'Todas las bases (dinámico)'
+                : formatearBasesDatos(respaldo.origen)}
           </dd>
         </div>
         <div>

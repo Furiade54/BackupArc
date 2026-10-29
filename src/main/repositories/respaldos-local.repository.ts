@@ -28,6 +28,7 @@ interface FilaRespaldo {
   nombre: string;
   tipo: string;
   origen: string;
+  todas_las_bases: number;
   mssql_conexion: string | null;
   destino: string;
   frecuencia_minutos: number;
@@ -132,6 +133,7 @@ function mapearRespaldo(fila: FilaRespaldo): RespaldoConfigurado {
     nombre: fila.nombre,
     tipo: esTipoRespaldo(fila.tipo) ? fila.tipo : 'archivos',
     origen: fila.origen,
+    todasLasBases: fila.todas_las_bases === 1,
     conexionMssql: conexionDeFila(fila),
     destino: fila.destino,
     frecuenciaMinutos: fila.frecuencia_minutos,
@@ -243,6 +245,7 @@ export function crearRespaldo(datos: NuevoRespaldo): RespaldoConfigurado {
         nombre,
         tipo,
         origen,
+        todas_las_bases,
         destino,
         frecuencia_minutos,
         hora_ejecucion,
@@ -263,12 +266,13 @@ export function crearRespaldo(datos: NuevoRespaldo): RespaldoConfigurado {
         proxima_ejecucion,
         ultimo_estado,
         creado_en
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'pendiente', ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'pendiente', ?)
     `)
     .run(
       datos.nombre,
       datos.tipo,
       datos.origen,
+      datos.todasLasBases ? 1 : 0,
       datos.destino,
       datos.frecuenciaMinutos,
       datos.horaEjecucion,
@@ -325,6 +329,7 @@ export function actualizarRespaldo(id: number, datos: NuevoRespaldo): RespaldoCo
       SET nombre = ?,
           tipo = ?,
           origen = ?,
+          todas_las_bases = ?,
           mssql_conexion = ?,
           destino = ?,
           frecuencia_minutos = ?,
@@ -348,6 +353,7 @@ export function actualizarRespaldo(id: number, datos: NuevoRespaldo): RespaldoCo
       datos.nombre,
       datos.tipo,
       datos.origen,
+      datos.todasLasBases ? 1 : 0,
       conexionMssql,
       datos.destino,
       datos.frecuenciaMinutos,

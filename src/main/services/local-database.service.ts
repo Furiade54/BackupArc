@@ -132,6 +132,7 @@ export function inicializarBaseDatosLocal(): void {
       nombre TEXT NOT NULL,
       tipo TEXT NOT NULL DEFAULT 'archivos',
       origen TEXT NOT NULL,
+      todas_las_bases INTEGER NOT NULL DEFAULT 0,
       destino TEXT NOT NULL,
       frecuencia_minutos INTEGER NOT NULL,
       hora_ejecucion TEXT NOT NULL,
@@ -183,6 +184,10 @@ export function inicializarBaseDatosLocal(): void {
 
   if (!columnasRespaldos.some((columna) => columna.name === 'identificador_unico')) {
     conexion.exec('ALTER TABLE respaldos ADD COLUMN identificador_unico INTEGER NOT NULL DEFAULT 1');
+  }
+
+  if (!columnasRespaldos.some((columna) => columna.name === 'todas_las_bases')) {
+    conexion.exec('ALTER TABLE respaldos ADD COLUMN todas_las_bases INTEGER NOT NULL DEFAULT 0');
   }
 
   if (!columnasRespaldos.some((columna) => columna.name === 'comprimir')) {

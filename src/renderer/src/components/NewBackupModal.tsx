@@ -88,6 +88,8 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
   const [basesDatos, setBasesDatos] = useState<string[]>(() =>
     respaldo?.tipo === 'mssql' ? parsearBasesDatos(respaldo.origen) : [],
   );
+  // Respalda todas las bases ONLINE en cada ejecución, incluidas las nuevas.
+  const [todasLasBases, setTodasLasBases] = useState(respaldo?.todasLasBases ?? false);
   const [basesDatosAbiertas, setBasesDatosAbiertas] = useState(false);
   const [configuracionMssqlAbierta, setConfiguracionMssqlAbierta] = useState(false);
   // Cada tarea guarda su propia conexión; no se hereda la de otra tarea.
@@ -139,7 +141,7 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
 
     if (id === 'ubicacion') {
       if (esMssql) {
-        if (basesDatos.length === 0) {
+        if (!todasLasBases && basesDatos.length === 0) {
           return 'Selecciona al menos una base de datos con el botón Explorar.';
         }
 
@@ -263,6 +265,7 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
         nombre: nombre.trim(),
         tipo,
         origen: esMssql ? serializarBasesDatos(basesDatos) : origen.trim(),
+        todasLasBases: esMssql ? todasLasBases : false,
         conexionMssql: esMssql ? conexionMssql : null,
         destino: destino.trim(),
         frecuenciaMinutos,
@@ -446,9 +449,13 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                       <input
                         id="backup-bases"
                         type="text"
-                        value={basesDatos.join(', ')}
+                        value={
+                          todasLasBases
+                            ? 'Todas las bases (incluye las nuevas)'
+                            : basesDatos.join(', ')
+                        }
                         placeholder="Selecciona una o varias bases de datos"
-                        title={basesDatos.join(', ')}
+                        title={todasLasBases ? 'Todas las bases' : basesDatos.join(', ')}
                         readOnly
                         disabled={guardando}
                         onClick={abrirBasesDatos}
@@ -463,11 +470,13 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                       </button>
                     </div>
                     <span className="campo__ayuda">
-                      {basesDatos.length === 0
-                        ? 'Elige una, varias o todas las bases del servidor.'
-                        : `${basesDatos.length} ${
-                            basesDatos.length === 1 ? 'base seleccionada' : 'bases seleccionadas'
-                          }.`}
+                      {todasLasBases
+                        ? `Modo dinámico: se respaldan todas las bases ONLINE en cada ejecución (${basesDatos.length} ahora), incluidas las que se creen después.`
+                        : basesDatos.length === 0
+                          ? 'Elige una, varias o todas las bases del servidor.'
+                          : `${basesDatos.length} ${
+                              basesDatos.length === 1 ? 'base seleccionada' : 'bases seleccionadas'
+                            }.`}
                     </span>
                   </div>
                 ) : (
@@ -979,11 +988,13 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
       {basesDatosAbiertas && (
         <MssqlDatabasesModal
           seleccionadas={basesDatos}
+          todas={todasLasBases}
           conexion={conexionMssql}
           respaldoId={respaldo?.id}
           alCerrar={() => setBasesDatosAbiertas(false)}
-          alConfirmar={(bases) => {
+          alConfirmar={(bases, todas) => {
             setBasesDatos(bases);
+            setTodasLasBases(todas);
             setError(null);
             setBasesDatosAbiertas(false);
           }}

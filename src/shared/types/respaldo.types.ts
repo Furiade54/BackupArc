@@ -34,6 +34,8 @@ export interface RespaldoConfigurado {
   tipo: TipoRespaldo;
   /** Ruta de origen para archivos; bases elegidas (JSON) para MSSQL. */
   origen: string;
+  /** Respalda todas las bases de usuario ONLINE, incluidas las nuevas. */
+  todasLasBases: boolean;
   /** Servidor y credenciales propios de la tarea MSSQL. */
   conexionMssql: ResumenConexionMssql | null;
   destino: string;
@@ -73,6 +75,7 @@ export interface NuevoRespaldo {
   nombre: string;
   tipo: TipoRespaldo;
   origen: string;
+  todasLasBases: boolean;
   conexionMssql: ConexionMssql | null;
   destino: string;
   frecuenciaMinutos: number;

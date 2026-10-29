@@ -780,17 +780,17 @@ export async function respaldarBasesDatosMssql(
 ): Promise<ResultadoRespaldoMssql> {
   const solicitadas = parsearBasesDatos(respaldo.origen);
   // Las bases del sistema no se respaldan; las tareas antiguas aún pueden tenerlas.
-  const bases = solicitadas.filter((base) => !esBaseDeSistema(base));
+  const basesFijas = solicitadas.filter((base) => !esBaseDeSistema(base));
   const destino = respaldo.destino.trim();
 
-  if (bases.length !== solicitadas.length) {
+  if (basesFijas.length !== solicitadas.length) {
     logger.info('Bases del sistema omitidas en la tarea', {
       tarea: respaldo.nombre,
       bases: solicitadas.filter((base) => esBaseDeSistema(base)),
     });
   }
 
-  if (bases.length === 0) {
+  if (!respaldo.todasLasBases && basesFijas.length === 0) {
     throw new Error('Selecciona al menos una base de datos de usuario para respaldar.');
   }
 
@@ -833,9 +833,22 @@ export async function respaldarBasesDatosMssql(
     const estados = await pool.request().query<{ name: string; state_desc: string }>(`
       SELECT name, state_desc
       FROM sys.databases
-      WHERE name <> 'tempdb' AND source_database_id IS NULL
+      WHERE database_id > 4 AND source_database_id IS NULL
     `);
     const estadoPorNombre = new Map(estados.recordset.map((fila) => [fila.name, fila.state_desc]));
+    // En modo dinámico la lista se resuelve en cada ejecución, así una base
+    // nueva entra sin editar la tarea.
+    const bases = respaldo.todasLasBases
+      ? estados.recordset
+          .filter((fila) => fila.state_desc === 'ONLINE')
+          .map((fila) => fila.name)
+          .sort((a, b) => a.localeCompare(b))
+      : basesFijas;
+
+    if (bases.length === 0) {
+      throw new Error('No hay bases de usuario ONLINE para respaldar.');
+    }
+
     const disponibles = bases.filter((base) => estadoPorNombre.get(base) === 'ONLINE');
     // Solo se respaldan las bases ONLINE; el resto queda constancia como omitida.
     const omitidas = bases.filter((base) => estadoPorNombre.get(base) !== 'ONLINE');

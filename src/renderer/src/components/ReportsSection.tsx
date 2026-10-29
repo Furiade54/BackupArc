@@ -25,13 +25,16 @@ export function ReportsSection({ respaldos }: ReportsSectionProps) {
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Bases de todas las tareas MSSQL, sin repetir.
+  // Bases de todas las tareas MSSQL, sin repetir. En modo dinámico la lista
+  // guardada en la tarea es la foto del momento de crearla, por eso se suman
+  // las bases que aparecen en el informe ya consultado.
   const basesDisponibles = [
-    ...new Set(
-      respaldos
+    ...new Set([
+      ...respaldos
         .filter((respaldo) => respaldo.tipo === 'mssql')
         .flatMap((respaldo) => parsearBasesDatos(respaldo.origen)),
-    ),
+      ...(informe?.archivos.map((archivo) => archivo.baseDatos) ?? []),
+    ]),
   ].sort();
 
   const tareasMssql = respaldos.filter((respaldo) => respaldo.tipo === 'mssql');

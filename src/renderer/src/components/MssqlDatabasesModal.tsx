@@ -5,10 +5,12 @@ import './BackupModals.css';
 
 interface MssqlDatabasesModalProps {
   seleccionadas: string[];
+  /** Modo dinámico: respalda todas las bases ONLINE en cada ejecución. */
+  todas: boolean;
   conexion: ConfiguracionMssql | null;
   respaldoId?: number;
   alCerrar: () => void;
-  alConfirmar: (bases: string[]) => void;
+  alConfirmar: (bases: string[], todas: boolean) => void;
 }
 
 const ESTADO_DISPONIBLE = 'ONLINE';
@@ -16,6 +18,7 @@ const ESTADO_DESCONOCIDA = 'NO ENCONTRADA';
 
 export function MssqlDatabasesModal({
   seleccionadas,
+  todas: todasInicial,
   conexion,
   respaldoId,
   alCerrar,
@@ -23,6 +26,7 @@ export function MssqlDatabasesModal({
 }: MssqlDatabasesModalProps) {
   const [lista, setLista] = useState<BaseDatosMssql[]>([]);
   const [seleccion, setSeleccion] = useState<string[]>(seleccionadas);
+  const [todas, setTodas] = useState(todasInicial);
   const [filtro, setFiltro] = useState('');
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,21 +87,21 @@ export function MssqlDatabasesModal({
       : lista;
   }, [lista, filtro]);
 
-  const todasSeleccionadas =
-    disponibles.length > 0 && disponibles.every((nombre) => seleccion.includes(nombre));
-
   const alternar = (nombre: string) => {
     setSeleccion((anterior) =>
       anterior.includes(nombre) ? anterior.filter((item) => item !== nombre) : [...anterior, nombre],
     );
   };
 
+  // "Seleccionar todas" activa el modo dinámico: en cada ejecución se resuelven
+  // todas las bases ONLINE del servidor, incluidas las que se creen después.
   const alternarTodas = () => {
-    setSeleccion((anterior) =>
-      todasSeleccionadas
-        ? anterior.filter((nombre) => !disponibles.includes(nombre))
-        : Array.from(new Set([...anterior, ...disponibles])),
-    );
+    const activar = !todas;
+    setTodas(activar);
+
+    if (activar) {
+      setSeleccion(disponibles);
+    }
   };
 
   const reintentar = () => {
@@ -141,9 +145,16 @@ export function MssqlDatabasesModal({
             </div>
 
             <label className="selector-bd__todas">
-              <input type="checkbox" checked={todasSeleccionadas} onChange={alternarTodas} />
+              <input type="checkbox" checked={todas} onChange={alternarTodas} />
               Seleccionar todas ({disponibles.length})
             </label>
+
+            {todas && (
+              <span className="campo__ayuda">
+                Modo dinámico: se respalda toda base ONLINE en cada ejecución, incluidas las que se
+                creen después.
+              </span>
+            )}
 
             <ul className="selector-bd">
               {visibles.map((base) => {
@@ -157,7 +168,7 @@ export function MssqlDatabasesModal({
                       <input
                         type="checkbox"
                         checked={seleccion.includes(base.nombre)}
-                        disabled={!disponible}
+                        disabled={!disponible || todas}
                         onChange={() => alternar(base.nombre)}
                       />
                       <span className="selector-bd__nombre">{base.nombre}</span>
@@ -184,10 +195,10 @@ export function MssqlDatabasesModal({
               <button
                 type="button"
                 className="boton"
-                disabled={seleccion.length === 0}
-                onClick={() => alConfirmar([...seleccion].sort())}
+                disabled={!todas && seleccion.length === 0}
+                onClick={() => alConfirmar(todas ? disponibles : [...seleccion].sort(), todas)}
               >
-                Aplicar ({seleccion.length})
+                {todas ? 'Aplicar todas' : `Aplicar (${seleccion.length})`}
               </button>
             </div>
           </>

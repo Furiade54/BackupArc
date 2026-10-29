@@ -125,7 +125,11 @@ export function BackupCard({
     ? `Viene fallando desde ${inicioFallo ? formatearFechaHora(inicioFallo) : '—'}; último intento ${antiguedadTexto} (${porcentajeRedondeado}% · Fallida)`
     : `Antigüedad: ${antiguedadTexto.replace(/^hace /, '')} de ${limiteTexto} (${porcentajeRedondeado}% · ${ETIQUETAS_BARRA[estadoBarra]})`;
   const origenVisible =
-    respaldo.tipo === 'mssql' ? formatearBasesDatos(respaldo.origen) : respaldo.origen;
+    respaldo.tipo !== 'mssql'
+      ? respaldo.origen
+      : respaldo.todasLasBases
+        ? 'Todas las bases (dinámico)'
+        : formatearBasesDatos(respaldo.origen);
 
   return (
     <article
