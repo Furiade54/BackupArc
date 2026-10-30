@@ -64,7 +64,7 @@
 
 .informes__tarea-error {
   margin: 4px 0 0;
-  color: #fecaca;
+  color: var(--error-texto);
   font-size: var(--texto-xs);
   line-height: 1.45;
 }

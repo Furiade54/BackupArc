@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { Fragment, useId, useState, type FormEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { ConfiguracionMssql } from '../../../shared/types/api.types';
 import type {
@@ -6,7 +6,12 @@ import type {
   RespaldoConfigurado,
   TipoRespaldo,
 } from '../../../shared/types/respaldo.types';
-import { parsearBasesDatos, serializarBasesDatos } from '../../../shared/utils/bases-datos';
+import {
+  formatearBasesDatos,
+  parsearBasesDatos,
+  serializarBasesDatos,
+} from '../../../shared/utils/bases-datos';
+import { formatearFrecuencia } from '../utils/formato';
 import { MssqlConfigModal } from './MssqlConfigModal';
 import { MssqlDatabasesModal } from './MssqlDatabasesModal';
 import { Modal } from './Modal';
@@ -36,14 +41,63 @@ const VALOR_PERSONALIZADO = 'personalizado';
 const MINUTOS_POR_DIA = 1440;
 const MAX_FRECUENCIA_MINUTOS = 43200;
 
-type IdPaso = 'tipo' | 'ubicacion' | 'programacion' | 'opciones';
+type IdPaso = 'tipo' | 'ubicacion' | 'programacion' | 'opciones' | 'resumen';
 
 const PASOS: { id: IdPaso; etiqueta: string }[] = [
   { id: 'tipo', etiqueta: 'Básico' },
   { id: 'ubicacion', etiqueta: 'Ubicación' },
   { id: 'programacion', etiqueta: 'Programación' },
   { id: 'opciones', etiqueta: 'Opciones' },
+  { id: 'resumen', etiqueta: 'Resumen' },
 ];
+
+// Icono "i" con el detalle en un globo flotante, fuera del scroll del modal.
+function InfoGlobo({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
+  const id = useId();
+  const [globo, setGlobo] = useState<{ x: number; y: number; abajo: boolean } | null>(null);
+
+  // Muestra el globo sobre el icono; si no cabe arriba, lo coloca debajo.
+  const mostrar = (elemento: HTMLElement) => {
+    const rect = elemento.getBoundingClientRect();
+    const ancho = 300;
+    const abajo = rect.top < 140;
+
+    setGlobo({
+      x: Math.min(Math.max(12, rect.left - 8), window.innerWidth - ancho - 12),
+      y: abajo ? rect.bottom + 8 : rect.top - 8,
+      abajo,
+    });
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        className="campo__info"
+        aria-label={etiqueta}
+        aria-describedby={globo ? id : undefined}
+        onMouseEnter={(evento) => mostrar(evento.currentTarget)}
+        onMouseLeave={() => setGlobo(null)}
+        onFocus={(evento) => mostrar(evento.currentTarget)}
+        onBlur={() => setGlobo(null)}
+      >
+        i
+      </button>
+      {globo &&
+        createPortal(
+          <div
+            id={id}
+            role="tooltip"
+            className={`campo__globo${globo.abajo ? ' campo__globo--abajo' : ''}`}
+            style={{ left: globo.x, top: globo.y }}
+          >
+            {children}
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
 
 export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBackupModalProps) {
   const editando = respaldo !== null;
@@ -80,8 +134,6 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
     respaldo?.carpetaTemporalLectura ?? '',
   );
   const [carpetaZip, setCarpetaZip] = useState(respaldo?.carpetaZip ?? '');
-  // Globo flotante que explica por qué el .zip usa una ruta distinta.
-  const [globoZip, setGloboZip] = useState<{ x: number; y: number; abajo: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [indicePaso, setIndicePaso] = useState(0);
@@ -90,6 +142,14 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
   );
   // Respalda todas las bases ONLINE en cada ejecución, incluidas las nuevas.
   const [todasLasBases, setTodasLasBases] = useState(respaldo?.todasLasBases ?? false);
+  // Total de bases que ofrece el servidor, para expresar "N de M seleccionadas".
+  const [totalBases, setTotalBases] = useState<number | null>(null);
+  // La sección de almacenamiento temporal arranca plegada salvo que ya se use.
+  const [temporalAbierta, setTemporalAbierta] = useState(respaldo?.usarCopiaTemporal ?? false);
+  // Opciones avanzadas: siempre contraídas al entrar al paso, aunque la tarea
+  // editada ya use compresión o verificación (el encabezado muestra "Activa").
+  const [zipAbierto, setZipAbierto] = useState(false);
+  const [verificacionAbierta, setVerificacionAbierta] = useState(false);
   const [basesDatosAbiertas, setBasesDatosAbiertas] = useState(false);
   const [configuracionMssqlAbierta, setConfiguracionMssqlAbierta] = useState(false);
   // Cada tarea guarda su propia conexión; no se hereda la de otra tarea.
@@ -198,9 +258,15 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
     return null;
   };
 
-  const explorarCarpeta = async (campo: 'origen' | 'destino' | 'zip') => {
+  const explorarCarpeta = async (campo: 'origen' | 'destino' | 'zip' | 'temporal') => {
     const rutaActual =
-      campo === 'origen' ? origen : campo === 'destino' ? destino : carpetaZip;
+      campo === 'origen'
+        ? origen
+        : campo === 'destino'
+          ? destino
+          : campo === 'zip'
+            ? carpetaZip
+            : carpetaTemporal;
     const resultado = await window.api.dialogos.seleccionarCarpeta(rutaActual.trim() || undefined);
 
     if (!resultado.ok) {
@@ -216,8 +282,10 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
       setOrigen(resultado.datos);
     } else if (campo === 'destino') {
       setDestino(resultado.datos);
-    } else {
+    } else if (campo === 'zip') {
       setCarpetaZip(resultado.datos);
+    } else {
+      setCarpetaTemporal(resultado.datos);
     }
   };
 
@@ -301,16 +369,6 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
     }
   };
 
-  // Muestra el globo sobre el icono; si no cabe arriba, lo coloca debajo.
-  const mostrarGloboZip = (elemento: HTMLElement) => {
-    const rect = elemento.getBoundingClientRect();
-    const ancho = 300;
-    const x = Math.min(Math.max(12, rect.left - 8), window.innerWidth - ancho - 12);
-    const abajo = rect.top < 140;
-
-    setGloboZip({ x, y: abajo ? rect.bottom + 8 : rect.top - 8, abajo });
-  };
-
   const avanzar = (evento: FormEvent<HTMLFormElement>) => {
     evento.preventDefault();
 
@@ -335,10 +393,120 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
     setIndicePaso(Math.max(0, indiceActual - 1));
   };
 
+  // Texto del selector de bases: resumen corto y conteo siempre visible.
+  const totalReferencia = totalBases ?? basesDatos.length;
+  const textoBases = todasLasBases
+    ? `Todas las bases (${basesDatos.length})`
+    : formatearBasesDatos(serializarBasesDatos(basesDatos));
+  const ayudaBases =
+    basesDatos.length === 0
+      ? 'Elige una, varias o todas las bases del servidor.'
+      : todasLasBases
+        ? `${basesDatos.length} de ${totalReferencia} seleccionadas · se respaldan las ONLINE en cada ejecución, incluidas las nuevas.`
+        : `${basesDatos.length} de ${totalReferencia} seleccionadas.`;
+
+  // Resumen que se muestra en el último paso, justo antes de guardar.
+  const filasResumen: { etiqueta: string; valor: string; titulo?: string }[] = [
+    { etiqueta: 'Tipo', valor: esMssql ? 'Base de datos MSSQL' : 'Archivos y carpetas' },
+    { etiqueta: 'Nombre', valor: nombre.trim() || 'Sin definir' },
+  ];
+
+  if (esMssql) {
+    filasResumen.push({
+      etiqueta: 'Bases',
+      valor: todasLasBases
+        ? `Todas las ONLINE en cada ejecución (${basesDatos.length} ahora)`
+        : formatearBasesDatos(serializarBasesDatos(basesDatos)) || 'Sin definir',
+      titulo: todasLasBases ? undefined : basesDatos.join(', ') || undefined,
+    });
+    filasResumen.push({
+      etiqueta: 'Destino del .bak',
+      valor: destino.trim() || 'Sin definir',
+      titulo: destino.trim() || undefined,
+    });
+    if (carpetaZip.trim()) {
+      filasResumen.push({
+        etiqueta: 'Carpeta del .zip',
+        valor: carpetaZip.trim(),
+        titulo: carpetaZip.trim(),
+      });
+    }
+  } else {
+    filasResumen.push({
+      etiqueta: 'Origen',
+      valor: origen.trim() || 'Sin definir',
+      titulo: origen.trim() || undefined,
+    });
+    filasResumen.push({
+      etiqueta: 'Destino',
+      valor: destino.trim() || 'Sin definir',
+      titulo: destino.trim() || undefined,
+    });
+  }
+
+  filasResumen.push({
+    etiqueta: 'Frecuencia',
+    valor: usaHoraFija
+      ? `${formatearFrecuencia(frecuenciaMinutos)}, a las ${hora}`
+      : formatearFrecuencia(frecuenciaMinutos),
+  });
+
+  filasResumen.push({
+    etiqueta: 'Nombre de la copia',
+    valor: esMssql
+      ? modoNombre === 'fecha'
+        ? 'Con fecha y hora'
+        : modoNombre === 'unica'
+          ? 'Sin fecha, con identificador único'
+          : 'Nombre fijo (sobrescribe el .bak)'
+      : copiaConFecha
+        ? 'Con fecha y hora'
+        : 'Nombre fijo (sobrescribe la copia)',
+  });
+
+  filasResumen.push({
+    etiqueta: 'Retención',
+    valor: Number.isInteger(retencionDias) ? `${retencionDias} días` : 'Sin definir',
+  });
+
+  if (esMssql) {
+    filasResumen.push({
+      etiqueta: 'Modo',
+      valor:
+        modoMssql === 'diferencial'
+          ? `Diferencial (full cada ${fullCadaDiasNumero} días)`
+          : 'Completo en cada ejecución',
+    });
+
+    const adicionales: string[] = [];
+
+    if (comprimirBak) {
+      adicionales.push('comprime el .bak en .zip');
+    }
+
+    if (verificarBak) {
+      adicionales.push('verifica el .bak al terminar');
+    }
+
+    if (usarCopiaTemporal) {
+      adicionales.push('copia desde una carpeta temporal');
+    }
+
+    if (adicionales.length > 0) {
+      filasResumen.push({ etiqueta: 'Adicionales', valor: adicionales.join(' · ') });
+    }
+  } else {
+    filasResumen.push({
+      etiqueta: 'Formato',
+      valor: comprimir ? 'Archivo .zip' : 'Sin comprimir',
+    });
+  }
+
   return (
     <>
       <Modal
         titulo={editando ? 'Editar tarea de backup' : 'Nuevo backup'}
+        clase="modal--asistente"
         alCerrar={() => {
           // Evita que Escape cierre también este formulario cuando el diálogo
           // de credenciales está encima.
@@ -443,195 +611,258 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
             {pasoActual.id === 'ubicacion' && (
               <>
                 {esMssql ? (
-                  <div className="campo">
-                    <label htmlFor="backup-bases">Bases de datos</label>
-                    <div className="campo__ruta">
-                      <input
-                        id="backup-bases"
-                        type="text"
-                        value={
-                          todasLasBases
-                            ? 'Todas las bases (incluye las nuevas)'
-                            : basesDatos.join(', ')
-                        }
-                        placeholder="Selecciona una o varias bases de datos"
-                        title={todasLasBases ? 'Todas las bases' : basesDatos.join(', ')}
-                        readOnly
-                        disabled={guardando}
-                        onClick={abrirBasesDatos}
-                      />
-                      <button
-                        type="button"
-                        className="boton boton--secundario"
-                        disabled={guardando}
-                        onClick={abrirBasesDatos}
-                      >
-                        Explorar
-                      </button>
-                    </div>
-                    <span className="campo__ayuda">
-                      {todasLasBases
-                        ? `Modo dinámico: se respaldan todas las bases ONLINE en cada ejecución (${basesDatos.length} ahora), incluidas las que se creen después.`
-                        : basesDatos.length === 0
-                          ? 'Elige una, varias o todas las bases del servidor.'
-                          : `${basesDatos.length} ${
-                              basesDatos.length === 1 ? 'base seleccionada' : 'bases seleccionadas'
-                            }.`}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="campo">
-                    <label htmlFor="backup-origen">Origen</label>
-                    <div className="campo__ruta">
-                      <input
-                        id="backup-origen"
-                        type="text"
-                        value={origen}
-                        maxLength={500}
-                        placeholder="Carpeta o archivo a respaldar"
-                        disabled={guardando}
-                        onChange={(evento) => setOrigen(evento.target.value)}
-                      />
-                      <button
-                        type="button"
-                        className="boton boton--secundario"
-                        title="Seleccionar una carpeta"
-                        disabled={guardando}
-                        onClick={() => void explorarCarpeta('origen')}
-                      >
-                        Carpeta
-                      </button>
-                      <button
-                        type="button"
-                        className="boton boton--secundario"
-                        title="Seleccionar un archivo"
-                        disabled={guardando}
-                        onClick={() => void explorarArchivo()}
-                      >
-                        Archivo
-                      </button>
-                    </div>
-                    <span className="campo__ayuda">
-                      Elige una carpeta completa o un archivo suelto; también puedes escribir la
-                      ruta.
-                    </span>
-                  </div>
-                )}
+                  <>
+                    <section className="seccion">
+                      <div className="seccion__cabecera">
+                        <span className="seccion__numero" aria-hidden="true">
+                          1
+                        </span>
+                        <h3 className="seccion__titulo">Bases de datos</h3>
+                      </div>
+                      <div className="campo__ruta">
+                        <input
+                          id="backup-bases"
+                          type="text"
+                          aria-label="Bases de datos seleccionadas"
+                          value={textoBases}
+                          placeholder="Selecciona una o varias bases de datos"
+                          title={todasLasBases ? 'Todas las bases' : basesDatos.join(', ')}
+                          readOnly
+                          disabled={guardando}
+                          onClick={abrirBasesDatos}
+                        />
+                        <button
+                          type="button"
+                          className="boton boton--secundario"
+                          disabled={guardando}
+                          onClick={abrirBasesDatos}
+                        >
+                          Explorar
+                        </button>
+                      </div>
+                      <span className="campo__ayuda">{ayudaBases}</span>
+                    </section>
 
-                <div className="campo">
-                  <label htmlFor="backup-destino">
-                    {esMssql ? 'Carpeta destino en el servidor' : 'Destino'}
-                  </label>
-                  <div className="campo__ruta">
-                    <input
-                      id="backup-destino"
-                      type="text"
-                      value={destino}
-                      maxLength={500}
-                      placeholder={
-                        esMssql && servidorMssqlRemoto
-                          ? 'Ej. D:\\Backups (ruta del servidor)'
-                          : 'Lugar donde se guardará la copia'
-                      }
-                      disabled={guardando}
-                      onChange={(evento) => setDestino(evento.target.value)}
-                    />
-                    {(!esMssql || !servidorMssqlRemoto) && (
-                      <button
-                        type="button"
-                        className="boton boton--secundario"
-                        disabled={guardando}
-                        onClick={() => void explorarCarpeta('destino')}
-                      >
-                        Explorar
-                      </button>
-                    )}
-                  </div>
-                  {esMssql &&
-                    (servidorMssqlRemoto ? (
-                      <p className="campo__aviso" role="note">
-                        <strong>Servidor remoto:</strong> esta carpeta debe existir en{' '}
-                        <strong>{conexionMssql?.servidor}</strong>, no en este equipo. Escríbela tal
-                        como la ve el servidor SQL (por ejemplo <code>D:\Backups</code>) y créala
-                        allí antes del primer respaldo. Por eso aquí no aparece el botón Explorar.
-                      </p>
-                    ) : (
-                      <span className="campo__ayuda">
-                        Ruta tal como la ve el servidor SQL. Debe existir y ser accesible por la
-                        cuenta del servicio.
-                      </span>
-                    ))}
-                </div>
-
-                {esMssql && (
-                  <div className="campo">
-                    <label className="campo__casilla">
-                      <input
-                        type="checkbox"
-                        checked={usarCopiaTemporal}
-                        disabled={guardando}
-                        onChange={(evento) => setUsarCopiaTemporal(evento.target.checked)}
-                      />
-                      Respaldar a una carpeta temporal y luego copiar al destino
-                    </label>
-                    <span className="campo__ayuda">
-                      SQL escribe en una carpeta local del servidor y esta app copia el .bak a la
-                      carpeta destino. Útil cuando SQL Server no tiene permisos para escribir
-                      directamente en el destino (por ejemplo, un NAS en red).
-                    </span>
-
-                    {usarCopiaTemporal && (
-                      <>
-                        <label htmlFor="backup-carpeta-temporal">
-                          Carpeta temporal (opcional)
-                        </label>
+                    <section className="seccion">
+                      <div className="seccion__cabecera">
+                        <span className="seccion__numero" aria-hidden="true">
+                          2
+                        </span>
+                        <h3 className="seccion__titulo">Almacenamiento del backup</h3>
+                      </div>
+                      <div className="campo">
+                        <div className="campo__etiqueta">
+                          <label htmlFor="backup-destino">Carpeta destino del .bak</label>
+                          <InfoGlobo etiqueta="Qué ruta corresponde a cada operación">
+                            Esta ruta la usa SQL Server en su propio disco: el .bak se escribe
+                            allí, no en este equipo. Debe existir en el servidor y ser accesible
+                            por su cuenta de servicio. La carpeta del .zip, en cambio, la escribe
+                            esta app y puede estar en tu equipo o en una ruta de red.
+                          </InfoGlobo>
+                        </div>
                         <div className="campo__ruta">
                           <input
-                            id="backup-carpeta-temporal"
+                            id="backup-destino"
                             type="text"
-                            value={carpetaTemporal}
+                            value={destino}
                             maxLength={500}
-                            placeholder="Carpeta de backup predeterminada del servidor SQL"
+                            placeholder={
+                              servidorMssqlRemoto
+                                ? 'Ej. D:\\Backups (ruta del servidor)'
+                                : 'Lugar donde se guardará la copia'
+                            }
                             disabled={guardando}
-                            onChange={(evento) => setCarpetaTemporal(evento.target.value)}
+                            onChange={(evento) => setDestino(evento.target.value)}
                           />
+                          {!servidorMssqlRemoto && (
+                            <button
+                              type="button"
+                              className="boton boton--secundario"
+                              disabled={guardando}
+                              onClick={() => void explorarCarpeta('destino')}
+                            >
+                              Explorar
+                            </button>
+                          )}
                         </div>
                         <span className="campo__ayuda">
-                          {carpetaTemporal.trim()
-                            ? 'Ruta donde SQL Server escribirá el .bak intermedio.'
-                            : 'Si lo dejas vacío se usará la carpeta de backup predeterminada de la instancia MSSQL.'}
+                          {servidorMssqlRemoto
+                            ? `Debe existir en ${conexionMssql?.servidor}, no en este equipo. Créala allí antes del primer respaldo.`
+                            : 'Ruta tal como la ve SQL Server. Debe existir y ser accesible por la cuenta del servicio.'}
                         </span>
+                      </div>
+                    </section>
 
-                        {servidorMssqlRemoto && (
-                          <>
-                            <label htmlFor="backup-carpeta-temporal-lectura">
-                              Ruta de lectura (opcional)
-                            </label>
-                            <div className="campo__ruta">
-                              <input
-                                id="backup-carpeta-temporal-lectura"
-                                type="text"
-                                value={carpetaTemporalLectura}
-                                maxLength={500}
-                                placeholder="Ej. \\AVES2023\BackupArc\Temp"
-                                disabled={guardando}
-                                onChange={(evento) => setCarpetaTemporalLectura(evento.target.value)}
-                              />
+                    <section className="seccion">
+                      <h3 className="seccion__titulo">
+                        <button
+                          type="button"
+                          className="seccion__disparador"
+                          aria-expanded={temporalAbierta}
+                          aria-controls="backup-temporal"
+                          onClick={() => setTemporalAbierta(!temporalAbierta)}
+                        >
+                          <span className="seccion__numero" aria-hidden="true">
+                            3
+                          </span>
+                          <span className="seccion__texto">
+                            Configuración de almacenamiento temporal
+                          </span>
+                          {usarCopiaTemporal && <span className="seccion__marca">Activa</span>}
+                          <span
+                            className={`seccion__flecha${
+                              temporalAbierta ? ' seccion__flecha--abierta' : ''
+                            }`}
+                            aria-hidden="true"
+                          />
+                        </button>
+                      </h3>
+
+                      {temporalAbierta && (
+                        <div id="backup-temporal" className="seccion__cuerpo">
+                          <label className="campo__casilla">
+                            <input
+                              type="checkbox"
+                              checked={usarCopiaTemporal}
+                              disabled={guardando}
+                              onChange={(evento) => setUsarCopiaTemporal(evento.target.checked)}
+                            />
+                            Respaldar a una carpeta temporal y luego copiar al destino
+                          </label>
+                          <span className="campo__ayuda">
+                            SQL escribe en una carpeta local del servidor y esta app copia el .bak
+                            al destino. Útil cuando el servicio no puede escribir en el destino
+                            (por ejemplo, un NAS en red).
+                          </span>
+
+                          {usarCopiaTemporal && (
+                            <div className="campo">
+                              <label htmlFor="backup-carpeta-temporal">
+                                Carpeta temporal (opcional)
+                              </label>
+                              <div className="campo__ruta">
+                                <input
+                                  id="backup-carpeta-temporal"
+                                  type="text"
+                                  value={carpetaTemporal}
+                                  maxLength={500}
+                                  placeholder="Carpeta de backup predeterminada del servidor SQL"
+                                  disabled={guardando}
+                                  onChange={(evento) => setCarpetaTemporal(evento.target.value)}
+                                />
+                                {!servidorMssqlRemoto && (
+                                  <button
+                                    type="button"
+                                    className="boton boton--secundario"
+                                    disabled={guardando}
+                                    onClick={() => void explorarCarpeta('temporal')}
+                                  >
+                                    Explorar
+                                  </button>
+                                )}
+                              </div>
+                              <span className="campo__ayuda">
+                                {carpetaTemporal.trim()
+                                  ? 'Ruta donde SQL Server escribirá el .bak intermedio.'
+                                  : 'Si lo dejas vacío se usará la carpeta de backup predeterminada de la instancia MSSQL.'}
+                              </span>
+
+                              {servidorMssqlRemoto && (
+                                <>
+                                  <label htmlFor="backup-carpeta-temporal-lectura">
+                                    Ruta de lectura (opcional)
+                                  </label>
+                                  <div className="campo__ruta">
+                                    <input
+                                      id="backup-carpeta-temporal-lectura"
+                                      type="text"
+                                      value={carpetaTemporalLectura}
+                                      maxLength={500}
+                                      placeholder="Ej. \\AVES2023\BackupArc\Temp"
+                                      disabled={guardando}
+                                      onChange={(evento) =>
+                                        setCarpetaTemporalLectura(evento.target.value)
+                                      }
+                                    />
+                                  </div>
+                                  <span className="campo__ayuda">
+                                    Ruta UNC desde la que esta app lee el .bak temporal. Déjala
+                                    vacía solo si la carpeta temporal es accesible desde este
+                                    equipo; debe existir en el servidor y ser accesible por su
+                                    cuenta de servicio.
+                                  </span>
+                                </>
+                              )}
                             </div>
-                            <span className="campo__ayuda">
-                              Ruta UNC desde la que esta app lee el .bak temporal. Déjala vacía
-                              solo si la carpeta temporal es accesible desde este equipo.
-                            </span>
-                            <span className="campo__ayuda">
-                              La carpeta temporal debe existir en el servidor SQL y ser accesible
-                              por su cuenta de servicio.
-                            </span>
-                          </>
-                        )}
-                      </>
-                    )}
-                  </div>
+                          )}
+                        </div>
+                      )}
+                    </section>
+                  </>
+                ) : (
+                  <>
+                    <div className="campo">
+                      <label htmlFor="backup-origen">Origen</label>
+                      <div className="campo__ruta">
+                        <input
+                          id="backup-origen"
+                          type="text"
+                          value={origen}
+                          maxLength={500}
+                          placeholder="Carpeta o archivo a respaldar"
+                          disabled={guardando}
+                          onChange={(evento) => setOrigen(evento.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="boton boton--secundario"
+                          title="Seleccionar una carpeta"
+                          disabled={guardando}
+                          onClick={() => void explorarCarpeta('origen')}
+                        >
+                          Carpeta
+                        </button>
+                        <button
+                          type="button"
+                          className="boton boton--secundario"
+                          title="Seleccionar un archivo"
+                          disabled={guardando}
+                          onClick={() => void explorarArchivo()}
+                        >
+                          Archivo
+                        </button>
+                      </div>
+                      <span className="campo__ayuda">
+                        Elige una carpeta completa o un archivo suelto; también puedes escribir la
+                        ruta.
+                      </span>
+                    </div>
+
+                    <div className="campo">
+                      <label htmlFor="backup-destino">Destino</label>
+                      <div className="campo__ruta">
+                        <input
+                          id="backup-destino"
+                          type="text"
+                          value={destino}
+                          maxLength={500}
+                          placeholder="Lugar donde se guardará la copia"
+                          disabled={guardando}
+                          onChange={(evento) => setDestino(evento.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="boton boton--secundario"
+                          disabled={guardando}
+                          onClick={() => void explorarCarpeta('destino')}
+                        >
+                          Explorar
+                        </button>
+                      </div>
+                    </div>
+                  </>
                 )}
+
               </>
             )}
 
@@ -785,109 +1016,135 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                         disabled={guardando}
                         onChange={(evento) => setRetencion(evento.target.value)}
                       />
-                      <span className="campo__ayuda">
-                        Al terminar cada respaldo se eliminan de la carpeta destino los .bak y .zip
-                        con antigüedad mayor, y se depura el historial de la tarea. Siempre se
-                        conserva el respaldo más reciente de cada base y el full que usan los
-                        diferenciales.
-                      </span>
                     </div>
-
-                    <div className="campo__casillas">
-                      <label className="campo__casilla">
-                        <input
-                          type="checkbox"
-                          checked={comprimirBak}
-                          disabled={guardando}
-                          onChange={(evento) => setComprimirBak(evento.target.checked)}
-                        />
-                        Comprimir el .bak en .zip
-                      </label>
-
-                      <label className="campo__casilla">
-                        <input
-                          type="checkbox"
-                          checked={verificarBak}
-                          disabled={guardando}
-                          onChange={(evento) => setVerificarBak(evento.target.checked)}
-                        />
-                        Verificar el .bak al terminar (RESTORE VERIFYONLY)
-                      </label>
-
-                      <span className="campo__ayuda">
-                        La verificación lee el archivo completo y puede alargar la ejecución. El
-                        .zip usa el nombre de la base y se reemplaza en cada ejecución; el .bak
-                        original se conserva.
-                      </span>
-                    </div>
-
-                    {comprimirBak && (
-                      <div className="campo">
-                        <div className="campo__etiqueta">
-                          <label htmlFor="backup-carpeta-zip">Carpeta del .zip (opcional)</label>
-                          <button
-                            type="button"
-                            className="campo__info"
-                            aria-label="Por qué el .zip usa una ruta distinta"
-                            aria-describedby={globoZip ? 'info-carpeta-zip' : undefined}
-                            onMouseEnter={(evento) => mostrarGloboZip(evento.currentTarget)}
-                            onMouseLeave={() => setGloboZip(null)}
-                            onFocus={(evento) => mostrarGloboZip(evento.currentTarget)}
-                            onBlur={() => setGloboZip(null)}
-                          >
-                            i
-                          </button>
-                          {globoZip &&
-                            createPortal(
-                              <div
-                                id="info-carpeta-zip"
-                                role="tooltip"
-                                className={`campo__globo${
-                                  globoZip.abajo ? ' campo__globo--abajo' : ''
-                                }`}
-                                style={{ left: globoZip.x, top: globoZip.y }}
-                              >
-                                El .bak lo escribe SQL Server en el disco del servidor; el .zip lo
-                                escribe esta app en tu equipo. Separarlas permite dejar los .bak
-                                grandes en el servidor y los .zip en una carpeta local o de red,
-                                aplicar retenciones distintas y conservar el .bak intacto si la
-                                compresión falla.
-                              </div>,
-                              document.body,
-                            )}
-                        </div>
-                        <div className="campo__ruta">
-                          <input
-                            id="backup-carpeta-zip"
-                            type="text"
-                            value={carpetaZip}
-                            maxLength={500}
-                            placeholder="Vacío = misma carpeta destino"
-                            disabled={guardando}
-                            onChange={(evento) => setCarpetaZip(evento.target.value)}
-                          />
-                          <button
-                            type="button"
-                            className="boton boton--secundario"
-                            disabled={guardando}
-                            onClick={() => void explorarCarpeta('zip')}
-                          >
-                            Explorar
-                          </button>
-                        </div>
-                        <span className="campo__ayuda">
-                          Carpeta de este equipo donde la app escribe el .zip; puede ser una ruta de
-                          red (UNC). Si la dejas vacía, el .zip se guarda junto al .bak en el
-                          destino.
-                        </span>
-                      </div>
-                    )}
 
                     <p className="campo__aviso" role="note">
                       Los .bak se guardan en el servidor SQL. La retención se aplica al terminar
                       cada respaldo; el más reciente y el full base de los diferenciales nunca se
                       eliminan.
                     </p>
+
+                    <div className="avanzadas">
+                      <h3 className="avanzadas__titulo">Opciones avanzadas</h3>
+
+                      <section className="seccion">
+                        <h3 className="seccion__titulo">
+                          <button
+                            type="button"
+                            className="seccion__disparador"
+                            aria-expanded={zipAbierto}
+                            aria-controls="backup-compresion"
+                            onClick={() => setZipAbierto(!zipAbierto)}
+                          >
+                            <span className="seccion__texto">Compresión ZIP</span>
+                            {comprimirBak && <span className="seccion__marca">Activa</span>}
+                            <span
+                              className={`seccion__flecha${
+                                zipAbierto ? ' seccion__flecha--abierta' : ''
+                              }`}
+                              aria-hidden="true"
+                            />
+                          </button>
+                        </h3>
+
+                        {zipAbierto && (
+                          <div id="backup-compresion" className="seccion__cuerpo">
+                            <label className="campo__casilla">
+                              <input
+                                type="checkbox"
+                                checked={comprimirBak}
+                                disabled={guardando}
+                                onChange={(evento) => setComprimirBak(evento.target.checked)}
+                              />
+                              Comprimir el .bak en .zip
+                            </label>
+                            <span className="campo__ayuda">
+                              El .zip usa el nombre de la base y se reemplaza en cada ejecución; el
+                              .bak original se conserva.
+                            </span>
+
+                            {comprimirBak && (
+                              <div className="campo">
+                                <div className="campo__etiqueta">
+                                  <label htmlFor="backup-carpeta-zip">
+                                    Carpeta del .zip (opcional)
+                                  </label>
+                                  <InfoGlobo etiqueta="Por qué el .zip usa una ruta distinta">
+                                    El .bak lo escribe SQL Server en el disco del servidor; el .zip
+                                    lo escribe esta app en tu equipo. Separarlas permite dejar los
+                                    .bak grandes en el servidor y los .zip en una carpeta local o
+                                    de red, aplicar retenciones distintas y conservar el .bak
+                                    intacto si la compresión falla.
+                                  </InfoGlobo>
+                                </div>
+                                <div className="campo__ruta">
+                                  <input
+                                    id="backup-carpeta-zip"
+                                    type="text"
+                                    value={carpetaZip}
+                                    maxLength={500}
+                                    placeholder="Vacío = misma carpeta destino"
+                                    disabled={guardando}
+                                    onChange={(evento) => setCarpetaZip(evento.target.value)}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="boton boton--secundario"
+                                    disabled={guardando}
+                                    onClick={() => void explorarCarpeta('zip')}
+                                  >
+                                    Explorar
+                                  </button>
+                                </div>
+                                <span className="campo__ayuda">
+                                  Carpeta de este equipo donde la app escribe el .zip; puede ser una
+                                  ruta de red (UNC). Si la dejas vacía, el .zip se guarda junto al
+                                  .bak en el destino.
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </section>
+
+                      <section className="seccion">
+                        <h3 className="seccion__titulo">
+                          <button
+                            type="button"
+                            className="seccion__disparador"
+                            aria-expanded={verificacionAbierta}
+                            aria-controls="backup-verificacion"
+                            onClick={() => setVerificacionAbierta(!verificacionAbierta)}
+                          >
+                            <span className="seccion__texto">Verificación del backup</span>
+                            {verificarBak && <span className="seccion__marca">Activa</span>}
+                            <span
+                              className={`seccion__flecha${
+                                verificacionAbierta ? ' seccion__flecha--abierta' : ''
+                              }`}
+                              aria-hidden="true"
+                            />
+                          </button>
+                        </h3>
+
+                        {verificacionAbierta && (
+                          <div id="backup-verificacion" className="seccion__cuerpo">
+                            <label className="campo__casilla">
+                              <input
+                                type="checkbox"
+                                checked={verificarBak}
+                                disabled={guardando}
+                                onChange={(evento) => setVerificarBak(evento.target.checked)}
+                              />
+                              Verificar el .bak al terminar (RESTORE VERIFYONLY)
+                            </label>
+                            <span className="campo__ayuda">
+                              La verificación lee el archivo completo y puede alargar la ejecución.
+                            </span>
+                          </div>
+                        )}
+                      </section>
+                    </div>
                   </>
                 ) : (
                   <>
@@ -931,6 +1188,21 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                   </>
                 )}
               </>
+            )}
+
+            {pasoActual.id === 'resumen' && (
+              <section className="resumen" aria-label="Resumen de la configuración">
+                <dl className="resumen__lista">
+                  {filasResumen.map((fila) => (
+                    <Fragment key={fila.etiqueta}>
+                      <dt className="resumen__etiqueta">{fila.etiqueta}</dt>
+                      <dd className="resumen__valor" title={fila.titulo}>
+                        {fila.valor}
+                      </dd>
+                    </Fragment>
+                  ))}
+                </dl>
+              </section>
             )}
           </div>
 
@@ -992,9 +1264,10 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
           conexion={conexionMssql}
           respaldoId={respaldo?.id}
           alCerrar={() => setBasesDatosAbiertas(false)}
-          alConfirmar={(bases, todas) => {
+          alConfirmar={(bases, todas, total) => {
             setBasesDatos(bases);
             setTodasLasBases(todas);
+            setTotalBases(total);
             setError(null);
             setBasesDatosAbiertas(false);
           }}

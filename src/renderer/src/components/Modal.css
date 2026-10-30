@@ -16,7 +16,7 @@
   max-height: 85vh;
   border: 1px solid var(--borde);
   border-radius: 16px;
-  background: linear-gradient(180deg, #182640 0%, #142036 100%);
+  background: linear-gradient(180deg, #0b2038 0%, #081b30 100%);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
   animation: modal-aparecer 0.14s ease-out;
 }

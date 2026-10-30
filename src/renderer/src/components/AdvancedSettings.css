@@ -18,7 +18,7 @@
   padding: 0;
   border: 1px solid var(--borde-fuerte);
   border-radius: 14px;
-  background: linear-gradient(180deg, #1e2c47 0%, #17243b 100%);
+  background: linear-gradient(180deg, #0b2038 0%, #0a1e34 100%);
   box-shadow: 0 12px 28px rgba(2, 8, 20, 0.4);
   list-style: none;
   overflow: hidden;
@@ -39,7 +39,7 @@
 }
 
 .ajuste__etiqueta:hover {
-  background: rgba(200, 234, 251, 0.04);
+  background: color-mix(in srgb, var(--acento) 4%, transparent);
 }
 
 .ajuste__etiqueta--bloqueada {
@@ -101,7 +101,7 @@
   height: 24px;
   border: 1px solid var(--borde);
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.22);
+  background: color-mix(in srgb, var(--borde) 85%, transparent);
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
@@ -111,23 +111,23 @@
   height: 18px;
   margin: 2px;
   border-radius: 50%;
-  background: #94a3b8;
+  background: var(--texto-suave);
   transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .ajuste__control input:checked + .ajuste__pista {
-  border-color: rgba(200, 234, 251, 0.55);
+  border-color: color-mix(in srgb, var(--acento) 55%, transparent);
   background: color-mix(in srgb, var(--acento) 26%, transparent);
 }
 
 .ajuste__control input:checked + .ajuste__pista .ajuste__perilla {
   transform: translateX(16px);
   background: var(--acento);
-  box-shadow: 0 0 8px rgba(200, 234, 251, 0.6);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--acento) 60%, transparent);
 }
 
 .ajuste__control input:focus-visible + .ajuste__pista {
-  box-shadow: 0 0 0 3px rgba(200, 234, 251, 0.25);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--acento) 25%, transparent);
 }
 
 .ajuste__control input:disabled + .ajuste__pista {

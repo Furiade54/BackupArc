@@ -2,6 +2,11 @@
   width: min(460px, 100%);
 }
 
+/* El asistente tiene cinco pasos y necesita algo más de ancho. */
+.modal--asistente {
+  width: min(640px, 100%);
+}
+
 .formulario {
   display: flex;
   flex-direction: column;
@@ -28,9 +33,9 @@
 .asistente__boton {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   width: 100%;
-  padding: 7px 9px;
+  padding: 7px;
   border: 1px solid var(--borde);
   border-radius: 9px;
   background: color-mix(in srgb, var(--fondo-panel-suave) 55%, transparent);
@@ -51,11 +56,11 @@
   display: grid;
   place-items: center;
   flex: none;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: color-mix(in srgb, var(--texto) 10%, transparent);
-  font-size: var(--texto-xs);
+  font-size: 10px;
 }
 
 .asistente__etiqueta {
@@ -72,7 +77,7 @@
 
 .asistente__paso--activo .asistente__numero {
   background: var(--acento);
-  color: #0a2237;
+  color: #081b30;
 }
 
 .asistente__paso--completado .asistente__boton {
@@ -81,7 +86,7 @@
 
 .asistente__paso--completado .asistente__numero {
   background: color-mix(in srgb, var(--ok) 28%, transparent);
-  color: #bbf7d0;
+  color: var(--ok-texto);
 }
 
 .asistente__contenido {
@@ -96,7 +101,7 @@
   align-items: center;
   gap: 6px;
   margin: 0;
-  color: #bbf7d0;
+  color: var(--ok-texto);
   font-size: var(--texto-xs);
   font-weight: 500;
 }
@@ -116,6 +121,123 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+/* Bloques del asistente. Van anidados en el formulario para no chocar con la
+   clase .seccion que usa la vista principal. */
+.formulario--asistente .seccion {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 13px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--fondo-panel-suave) 38%, transparent);
+}
+
+.formulario--asistente .seccion__cabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.formulario--asistente .seccion__numero {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--acento) 22%, transparent);
+  color: var(--acento);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.formulario--asistente .seccion__titulo {
+  margin: 0;
+  color: var(--texto);
+  font-size: var(--texto-sm);
+  font-weight: 600;
+}
+
+.formulario--asistente .seccion__disparador {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.formulario--asistente .seccion__texto {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.formulario--asistente .seccion__disparador:hover .seccion__texto {
+  color: #fff;
+}
+
+.formulario--asistente .seccion__marca {
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ok) 24%, transparent);
+  color: var(--ok-texto);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.formulario--asistente .seccion__flecha {
+  flex: none;
+  width: 0;
+  height: 0;
+  margin-left: auto;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--texto-suave);
+  transition: transform 0.12s ease;
+}
+
+.formulario--asistente .seccion__marca + .seccion__flecha {
+  margin-left: 0;
+}
+
+.formulario--asistente .seccion__flecha--abierta {
+  transform: rotate(180deg);
+}
+
+.formulario--asistente .seccion__cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Bloque que agrupa las opciones secundarias del paso Opciones. */
+.avanzadas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.avanzadas__titulo {
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--borde);
+  color: var(--texto-suave);
+  font-size: var(--texto-xs);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .campo {
@@ -150,7 +272,7 @@
 .campo select:focus {
   outline: none;
   border-color: var(--acento);
-  box-shadow: 0 0 0 3px rgba(200, 234, 251, 0.2);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--acento) 20%, transparent);
 }
 
 .campo input:disabled,
@@ -201,7 +323,7 @@
 
 .campo__configurar:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(200, 234, 251, 0.2);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--acento) 20%, transparent);
 }
 
 .campo__configurar:disabled {
@@ -213,14 +335,14 @@
 .campo__configurar--pendiente {
   border-color: color-mix(in srgb, var(--aviso) 65%, transparent);
   background: color-mix(in srgb, var(--aviso) 16%, transparent);
-  color: #fde68a;
+  color: var(--aviso-texto);
   animation: configurar-pendiente 1.6s ease-in-out infinite;
 }
 
 .campo__configurar--pendiente:hover:not(:disabled) {
   border-color: var(--aviso);
   background: color-mix(in srgb, var(--aviso) 26%, transparent);
-  color: #fef3c7;
+  color: var(--aviso-texto);
 }
 
 /* Latido doble tipo pulso: dos picos suaves y descanso. */
@@ -288,9 +410,17 @@
   user-select: none;
 }
 
-.selector-bd__todas {
+.selector-bd__acciones {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--borde);
+}
+
+.selector-bd__todas {
   font-weight: 600;
 }
 
@@ -362,7 +492,7 @@
 .conexion__resultado--error {
   border-color: rgba(239, 68, 68, 0.35);
   background: rgba(239, 68, 68, 0.1);
-  color: #fecaca;
+  color: var(--error-texto);
 }
 
 /* Aviso flotante de conexión exitosa: aparece en la esquina de la ventana,
@@ -380,13 +510,13 @@
   border: 1px solid rgba(34, 197, 94, 0.4);
   border-radius: 10px;
   background: linear-gradient(180deg, #163b2a 0%, #123021 100%);
-  color: #bbf7d0;
+  color: var(--ok-texto);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
   animation: toast-aparecer 0.18s ease-out;
 }
 
 .toast__icono {
-  color: #4ade80;
+  color: var(--ok-texto);
   font-weight: 700;
   line-height: 1.4;
 }
@@ -512,13 +642,13 @@
   border-left: 3px solid var(--aviso);
   border-radius: 8px;
   background: color-mix(in srgb, var(--aviso) 12%, transparent);
-  color: #fde68a;
+  color: var(--aviso-texto);
   font-size: var(--texto-xs);
   line-height: 1.5;
 }
 
 .campo__aviso strong {
-  color: #fef3c7;
+  color: var(--aviso-texto);
 }
 
 .campo__aviso code {
@@ -528,13 +658,47 @@
   font-size: inherit;
 }
 
+/* Repaso de lo que se guardará, visible en el último paso del asistente. */
+.resumen {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 13px;
+  border: 1px solid var(--borde);
+  border-left: 3px solid color-mix(in srgb, var(--acento) 70%, var(--borde));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--fondo-panel-suave) 45%, transparent);
+}
+
+.resumen__lista {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 5px 14px;
+  margin: 0;
+}
+
+.resumen__etiqueta {
+  color: var(--texto-suave);
+  font-size: var(--texto-xs);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.resumen__valor {
+  margin: 0;
+  color: var(--texto);
+  font-size: var(--texto-xs);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .formulario__error {
   margin: 0;
   padding: 9px 11px;
   border: 1px solid rgba(239, 68, 68, 0.35);
   border-radius: 8px;
   background: rgba(239, 68, 68, 0.1);
-  color: #fecaca;
+  color: var(--error-texto);
   font-size: var(--texto-sm);
 }
 
@@ -938,14 +1102,14 @@
   border-color: color-mix(in srgb, var(--ok) 40%, transparent);
   border-left-color: var(--ok);
   background: color-mix(in srgb, var(--ok) 12%, transparent);
-  color: #bbf7d0;
+  color: var(--ok-texto);
 }
 
 .informe__veredicto--no {
   border-color: color-mix(in srgb, var(--aviso) 40%, transparent);
   border-left-color: var(--aviso);
   background: color-mix(in srgb, var(--aviso) 10%, transparent);
-  color: #fde68a;
+  color: var(--aviso-texto);
 }
 
 .informe__resumen {
@@ -1081,7 +1245,7 @@
   border-left: 3px solid var(--aviso);
   border-radius: 8px;
   background: color-mix(in srgb, var(--aviso) 10%, transparent);
-  color: #fde68a;
+  color: var(--aviso-texto);
   font-size: var(--texto-xs);
   line-height: 1.5;
 }
@@ -1156,13 +1320,13 @@
 
 .inventario__categoria--no_verificable {
   border-color: rgba(239, 68, 68, 0.35);
-  color: #fecaca;
+  color: var(--error-texto);
 }
 
 .inventario__categoria--posible_huerfano {
   border-color: rgba(239, 68, 68, 0.35);
   border-style: dashed;
-  color: #fecaca;
+  color: var(--error-texto);
 }
 
 .inventario__nombre {
@@ -1205,25 +1369,25 @@
 .etiqueta--ok {
   border-color: rgba(34, 197, 94, 0.3);
   background: rgba(34, 197, 94, 0.12);
-  color: #bbf7d0;
+  color: var(--ok-texto);
 }
 
 .etiqueta--advertencia {
   border-color: rgba(245, 158, 11, 0.3);
   background: rgba(245, 158, 11, 0.12);
-  color: #fde68a;
+  color: var(--aviso-texto);
 }
 
 .etiqueta--error {
   border-color: rgba(239, 68, 68, 0.3);
   background: rgba(239, 68, 68, 0.12);
-  color: #fecaca;
+  color: var(--error-texto);
 }
 
 .etiqueta--pendiente {
-  border-color: rgba(148, 163, 184, 0.25);
-  background: rgba(148, 163, 184, 0.1);
-  color: #cbd5e1;
+  border-color: var(--borde);
+  background: color-mix(in srgb, var(--borde) 45%, transparent);
+  color: var(--texto-suave);
 }
 
 @media (max-width: 520px) {

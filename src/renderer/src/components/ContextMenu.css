@@ -5,7 +5,7 @@
   padding: 5px;
   border: 1px solid var(--borde);
   border-radius: 11px;
-  background: linear-gradient(180deg, #1a2a45 0%, #142036 100%);
+  background: linear-gradient(180deg, #0b2239 0%, #081b30 100%);
   box-shadow:
     0 18px 48px rgba(0, 0, 0, 0.5),
     0 0 0 1px rgba(2, 8, 20, 0.35);
@@ -33,7 +33,7 @@
 .menu-contextual__opcion:hover,
 .menu-contextual__opcion:focus-visible {
   outline: none;
-  background: rgba(200, 234, 251, 0.14);
+  background: color-mix(in srgb, var(--acento) 14%, transparent);
   color: #fff;
 }
 
@@ -52,22 +52,22 @@
 }
 
 .menu-contextual__opcion--peligro {
-  color: #fca5a5;
+  color: var(--error-texto);
 }
 
 .menu-contextual__opcion--peligro .menu-contextual__icono {
-  color: #fca5a5;
+  color: var(--error-texto);
 }
 
 .menu-contextual__opcion--peligro:hover,
 .menu-contextual__opcion--peligro:focus-visible {
   background: rgba(239, 68, 68, 0.16);
-  color: #fecaca;
+  color: var(--error-texto);
 }
 
 .menu-contextual__opcion--peligro:hover .menu-contextual__icono,
 .menu-contextual__opcion--peligro:focus-visible .menu-contextual__icono {
-  color: #fecaca;
+  color: var(--error-texto);
 }
 
 .menu-contextual__separador {

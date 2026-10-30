@@ -10,7 +10,8 @@ interface MssqlDatabasesModalProps {
   conexion: ConfiguracionMssql | null;
   respaldoId?: number;
   alCerrar: () => void;
-  alConfirmar: (bases: string[], todas: boolean) => void;
+  /** Devuelve la selección, si usa el modo dinámico y el total que ofrece el servidor. */
+  alConfirmar: (bases: string[], todas: boolean, total: number) => void;
 }
 
 const ESTADO_DISPONIBLE = 'ONLINE';
@@ -98,10 +99,12 @@ export function MssqlDatabasesModal({
   const alternarTodas = () => {
     const activar = !todas;
     setTodas(activar);
+    setSeleccion(activar ? disponibles : []);
+  };
 
-    if (activar) {
-      setSeleccion(disponibles);
-    }
+  const desmarcarTodas = () => {
+    setTodas(false);
+    setSeleccion([]);
   };
 
   const reintentar = () => {
@@ -144,10 +147,20 @@ export function MssqlDatabasesModal({
               />
             </div>
 
-            <label className="selector-bd__todas">
-              <input type="checkbox" checked={todas} onChange={alternarTodas} />
-              Seleccionar todas ({disponibles.length})
-            </label>
+            <div className="selector-bd__acciones">
+              <label className="selector-bd__todas">
+                <input type="checkbox" checked={todas} onChange={alternarTodas} />
+                Seleccionar todas ({disponibles.length})
+              </label>
+              <button
+                type="button"
+                className="boton-texto"
+                disabled={!todas && seleccion.length === 0}
+                onClick={desmarcarTodas}
+              >
+                Desmarcar todas
+              </button>
+            </div>
 
             {todas && (
               <span className="campo__ayuda">
@@ -196,7 +209,9 @@ export function MssqlDatabasesModal({
                 type="button"
                 className="boton"
                 disabled={!todas && seleccion.length === 0}
-                onClick={() => alConfirmar(todas ? disponibles : [...seleccion].sort(), todas)}
+                onClick={() =>
+                  alConfirmar(todas ? disponibles : [...seleccion].sort(), todas, disponibles.length)
+                }
               >
                 {todas ? 'Aplicar todas' : `Aplicar (${seleccion.length})`}
               </button>

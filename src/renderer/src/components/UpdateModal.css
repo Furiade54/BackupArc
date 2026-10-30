@@ -47,6 +47,6 @@
   height: 100%;
   border-radius: inherit;
   background: var(--acento);
-  box-shadow: 0 0 10px rgba(200, 234, 251, 0.45);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--acento) 45%, transparent);
   transition: width 0.2s ease;
 }

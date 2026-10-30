@@ -1,17 +1,27 @@
 :root {
   color-scheme: dark;
-  --fondo: #0d1626;
-  --fondo-panel: #142036;
-  --fondo-panel-suave: #182640;
-  --borde: rgba(148, 163, 184, 0.16);
-  --borde-fuerte: rgba(148, 163, 184, 0.3);
-  --texto: #e6edf7;
-  --texto-suave: #94a3b8;
-  --acento: #c8eafb;
-  --acento-claro: #e6f5fe;
+  /* Paleta oficial: azul marino con acentos celestes. */
+  --fondo: #081b30;
+  --fondo-panel: #0b2038;
+  --fondo-panel-suave: #12314e;
+  --borde: #29435c;
+  --borde-fuerte: #3a5a78;
+  --texto: #e5eff8;
+  --texto-suave: #91a8be;
+  /* Acento de iconos, enlaces y estados activos. */
+  --acento: #8ddcfa;
+  /* Solo botones principales y llamadas a la acción. */
+  --acento-accion: #9ddff3;
+  /* Estados: color base para bordes e indicadores, tono de texto para leer
+     sobre el tinte de fondo del mismo estado. */
   --ok: #22c55e;
-  --error: #ef4444;
+  --ok-texto: #bbf7d0;
   --aviso: #f59e0b;
+  --aviso-texto: #fde68a;
+  --error: #ef4444;
+  --error-texto: #fecaca;
+  --info: #8ddcfa;
+  --info-texto: #c7edfa;
   /* Escala tipográfica única: xs (etiquetas), sm (secundario), md (controles),
      base (cuerpo), lg (títulos) y xl (cifras destacadas). */
   --texto-xs: 11px;
@@ -46,8 +56,8 @@ body,
 body {
   margin: 0;
   background:
-    radial-gradient(circle at 15% -10%, rgba(200, 234, 251, 0.12), transparent 45%),
-    radial-gradient(circle at 90% 0%, rgba(96, 165, 250, 0.1), transparent 40%),
+    radial-gradient(circle at 15% -10%, rgba(157, 223, 243, 0.1), transparent 45%),
+    radial-gradient(circle at 90% 0%, rgba(141, 220, 250, 0.08), transparent 40%),
     var(--fondo);
   color: var(--texto);
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -143,10 +153,10 @@ button {
 .mensaje-error {
   margin: 0;
   padding: 10px 12px;
-  border: 1px solid rgba(239, 68, 68, 0.35);
+  border: 1px solid color-mix(in srgb, var(--error) 35%, transparent);
   border-radius: 9px;
-  background: rgba(239, 68, 68, 0.1);
-  color: #fecaca;
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+  color: var(--error-texto);
   font-size: var(--texto-sm);
 }
 
@@ -164,17 +174,17 @@ button {
 
 .boton {
   padding: 9px 18px;
-  border: 1px solid rgba(200, 234, 251, 0.85);
+  border: 1px solid color-mix(in srgb, var(--acento-accion) 85%, transparent);
   border-radius: 10px;
-  background: var(--acento);
-  color: #0a2237;
+  background: var(--acento-accion);
+  color: #081b30;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
 }
 
 .boton:hover:not(:disabled) {
-  background: var(--acento-claro);
+  background: color-mix(in srgb, var(--acento-accion) 82%, white);
 }
 
 .boton:active:not(:disabled) {
@@ -198,13 +208,13 @@ button {
 }
 
 .boton--peligro {
-  border-color: rgba(239, 68, 68, 0.4);
-  background: rgba(239, 68, 68, 0.14);
-  color: #fecaca;
+  border-color: color-mix(in srgb, var(--error) 40%, transparent);
+  background: color-mix(in srgb, var(--error) 14%, transparent);
+  color: var(--error-texto);
 }
 
 .boton--peligro:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.24);
+  background: color-mix(in srgb, var(--error) 24%, transparent);
 }
 
 .tarjetas {
@@ -217,10 +227,10 @@ button {
   padding: 18px 20px;
   border: 1px solid var(--borde-fuerte);
   border-radius: 16px;
-  background: linear-gradient(180deg, #1e2c47 0%, #17243b 100%);
+  background: linear-gradient(180deg, #0b2038 0%, #0a1e34 100%);
   box-shadow:
     0 16px 36px rgba(2, 8, 20, 0.42),
-    inset 0 1px 0 rgba(200, 234, 251, 0.06);
+    inset 0 1px 0 rgba(157, 223, 243, 0.06);
 }
 
 .tarjeta__titulo {
@@ -249,7 +259,7 @@ button {
 
 .tarjeta__meta {
   margin: 10px 0 0;
-  color: #d8eefb;
+  color: var(--acento);
   font-size: var(--texto-sm);
   font-family: Consolas, 'Cascadia Mono', monospace;
 }
@@ -323,7 +333,7 @@ button {
   min-height: 280px;
   border: 1px solid var(--borde-fuerte);
   border-radius: 16px;
-  background: linear-gradient(180deg, #1a2740 0%, #141f34 100%);
+  background: linear-gradient(180deg, #0b2038 0%, #081b30 100%);
   box-shadow: 0 16px 36px rgba(2, 8, 20, 0.42);
   overflow: hidden;
 }
@@ -345,10 +355,10 @@ button {
 .contador {
   min-width: 26px;
   padding: 2px 9px;
-  border: 1px solid rgba(200, 234, 251, 0.3);
+  border: 1px solid rgba(157, 223, 243, 0.3);
   border-radius: 999px;
-  background: rgba(200, 234, 251, 0.12);
-  color: #d8eefb;
+  background: rgba(157, 223, 243, 0.12);
+  color: var(--texto);
   font-size: var(--texto-sm);
   text-align: center;
 }
@@ -369,7 +379,7 @@ thead th {
   top: 0;
   z-index: 1;
   padding: 10px 16px;
-  background: #132035;
+  background: #102d49;
   color: var(--texto-suave);
   font-size: var(--texto-xs);
   font-weight: 600;
@@ -381,13 +391,13 @@ thead th {
 
 tbody td {
   padding: 11px 16px;
-  border-top: 1px solid rgba(148, 163, 184, 0.08);
-  color: #cbd5e1;
+  border-top: 1px solid color-mix(in srgb, var(--borde) 60%, transparent);
+  color: var(--texto);
   white-space: nowrap;
 }
 
 tbody tr:hover td {
-  background: rgba(200, 234, 251, 0.05);
+  background: color-mix(in srgb, var(--acento) 5%, transparent);
 }
 
 .celda-fuerte {
@@ -407,10 +417,10 @@ tbody tr:hover td {
 .etiqueta {
   display: inline-block;
   padding: 2px 9px;
-  border: 1px solid rgba(200, 234, 251, 0.3);
+  border: 1px solid color-mix(in srgb, var(--acento) 30%, transparent);
   border-radius: 999px;
-  background: rgba(200, 234, 251, 0.1);
-  color: #d8eefb;
+  background: color-mix(in srgb, var(--acento) 10%, transparent);
+  color: var(--texto);
   font-size: var(--texto-xs);
 }
 
@@ -446,18 +456,18 @@ tbody tr:hover td {
   width: 52px;
   height: 52px;
   padding: 0;
-  border: 1px solid rgba(200, 234, 251, 0.7);
+  border: 1px solid color-mix(in srgb, var(--acento-accion) 70%, transparent);
   border-radius: 18px;
-  background: var(--acento);
-  color: #0a2237;
-  box-shadow: 0 14px 32px rgba(200, 234, 251, 0.28);
+  background: var(--acento-accion);
+  color: #081b30;
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--acento-accion) 28%, transparent);
   cursor: pointer;
   transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .boton-flotante:hover {
-  background: var(--acento-claro);
-  box-shadow: 0 18px 36px rgba(200, 234, 251, 0.38);
+  background: color-mix(in srgb, var(--acento-accion) 82%, white);
+  box-shadow: 0 18px 36px color-mix(in srgb, var(--acento-accion) 38%, transparent);
   transform: translateY(-2px);
 }
 
@@ -467,7 +477,9 @@ tbody tr:hover td {
 
 .boton-flotante:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(200, 234, 251, 0.5), 0 14px 32px rgba(200, 234, 251, 0.28);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--acento) 50%, transparent),
+    0 14px 32px color-mix(in srgb, var(--acento) 28%, transparent);
 }
 
 @media (max-width: 860px) {
