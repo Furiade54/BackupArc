@@ -227,6 +227,17 @@ export interface InformeGlobalBak {
   resumenZip: ResumenZipInforme;
 }
 
+export interface EjecucionesRegistradasInforme {
+  total: number;
+  correctas: number;
+  fallidas: number;
+  /** Corridas terminadas con observaciones, ni correctas ni fallidas. */
+  advertencias: number;
+  tareas: number;
+  /** Una entrada por día local que tenga registros. */
+  porDia: { dia: string; total: number }[];
+}
+
 /**
  * Un .zip por base y tarea se reemplaza en cada ejecución, por lo que solo se
  * cuenta el más reciente de cada base dentro del rango.
@@ -269,5 +280,13 @@ export interface EjecucionRespaldo {
   detalle: string | null;
   tipo: string | null;
   runId: string | null;
+  /** Milisegundos que duró la corrida; null en registros anteriores a la métrica. */
+  duracionMs: number | null;
+  /** Archivos copiados: bases respaldadas (MSSQL) o archivos del origen. */
+  archivos: number | null;
+  /** Bytes copiados desde el origen o generados por SQL Server. */
+  bytes: number | null;
+  /** Ruta donde quedó la copia; solo tareas de archivos. */
+  ubicacion: string | null;
   resultados: ResultadoBaseRespaldo[];
 }

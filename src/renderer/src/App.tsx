@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import logoMarcaAgua from '../../../assets/icons/png/512.png';
 import type { InfoAplicacion, ResultadoActualizacion } from '../../shared/types/api.types';
 import type { RespaldoConfigurado } from '../../shared/types/respaldo.types';
 import { AdvancedSettings } from './components/AdvancedSettings';
@@ -9,12 +10,14 @@ import { ContextMenu, type OpcionMenu } from './components/ContextMenu';
 import { HistoryModal } from './components/HistoryModal';
 import { Modal } from './components/Modal';
 import { NewBackupModal } from './components/NewBackupModal';
+import { PanelControl, type FiltroCopias } from './components/PanelControl';
 import { ReportsSection } from './components/ReportsSection';
 import { Sidebar } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
 import { UpdateModal } from './components/UpdateModal';
 
 const TITULOS_SECCION: Record<string, string> = {
+  'seccion-panel': 'Panel de control',
   'seccion-copias': 'Copias de seguridad',
   'seccion-informes': 'Informes',
 };
@@ -29,7 +32,9 @@ function App() {
   const [ejecucionesActivas, setEjecucionesActivas] = useState<Set<number>>(() => new Set());
   const [menuAbierto, setMenuAbierto] = useState(true);
   const [preferenciasListas, setPreferenciasListas] = useState(false);
-  const [seccionActiva, setSeccionActiva] = useState<string>('seccion-copias');
+  const [seccionActiva, setSeccionActiva] = useState<string>('seccion-panel');
+  const [filtroCopias, setFiltroCopias] = useState<FiltroCopias>('todas');
+  const [copiaResaltada, setCopiaResaltada] = useState<number | null>(null);
   const [ahora, setAhora] = useState(() => Date.now());
   const [modalNuevoAbierto, setModalNuevoAbierto] = useState(false);
   const [modalConfiguracionAbierto, setModalConfiguracionAbierto] = useState(false);
@@ -185,7 +190,16 @@ function App() {
   }, []);
 
   const navegarASeccion = useCallback((id: string) => {
+    setFiltroCopias('todas');
+    setCopiaResaltada(null);
     setSeccionActiva(id);
+  }, []);
+
+  // Accesos directos del panel: abren Copias ya filtradas y, si aplica, resaltan una tarea.
+  const abrirCopias = useCallback((filtro: FiltroCopias, resaltarId?: number) => {
+    setFiltroCopias(filtro);
+    setCopiaResaltada(resaltarId ?? null);
+    setSeccionActiva('seccion-copias');
   }, []);
 
   const abrirNuevaCopia = useCallback(() => {
@@ -356,11 +370,23 @@ function App() {
     }
   }
 
+  const copiasVisibles = respaldos.filter((respaldo) => {
+    if (filtroCopias === 'activas') {
+      return respaldo.habilitado;
+    }
+
+    if (filtroCopias === 'error') {
+      return respaldo.ultimoEstado === 'error';
+    }
+
+    return true;
+  });
+
   return (
     <>
       <TitleBar
         plataforma={window.api.app.plataforma}
-        titulo={TITULOS_SECCION[seccionActiva] ?? 'Copias de seguridad'}
+        titulo={TITULOS_SECCION[seccionActiva] ?? 'Panel de control'}
         menuAbierto={menuAbierto}
         buscandoActualizacion={buscandoActualizacion}
         alAlternarMenu={alternarMenu}
@@ -380,26 +406,39 @@ function App() {
         <div
           className="app"
           ref={contenedorRef}
+          style={{ '--marca-agua': `url("${logoMarcaAgua}")` } as CSSProperties}
           onContextMenu={(evento) => {
             evento.preventDefault();
             abrirMenuFondo({ x: evento.clientX, y: evento.clientY });
           }}
         >
-          <h1 className="solo-lectores">{TITULOS_SECCION[seccionActiva] ?? 'Copias de seguridad'}</h1>
+          <h1 className="solo-lectores">{TITULOS_SECCION[seccionActiva] ?? 'Panel de control'}</h1>
 
           {seccionActiva === 'seccion-informes' ? (
             <ReportsSection respaldos={respaldos} />
+          ) : seccionActiva === 'seccion-panel' ? (
+            <PanelControl respaldos={respaldos} alCrearCopia={abrirNuevaCopia} alVerCopias={abrirCopias} />
           ) : (
             <section className="seccion">
               <div className="seccion__encabezado">
                 <div>
                   <h2>Copias configuradas</h2>
                   <p>
-                    {respaldos.length === 0
-                      ? 'Aún no hay tareas de respaldo.'
-                      : `${respaldos.length} ${respaldos.length === 1 ? 'tarea configurada' : 'tareas configuradas'}`}
+                    {filtroCopias !== 'todas'
+                      ? `${copiasVisibles.length} de ${respaldos.length} ${
+                          filtroCopias === 'error' ? 'con error' : 'activas'
+                        }`
+                      : respaldos.length === 0
+                        ? 'Aún no hay tareas de respaldo.'
+                        : `${respaldos.length} ${respaldos.length === 1 ? 'tarea configurada' : 'tareas configuradas'}`}
                   </p>
                 </div>
+
+                {filtroCopias !== 'todas' && (
+                  <button type="button" className="boton boton--secundario" onClick={() => navegarASeccion('seccion-copias')}>
+                    Quitar filtro
+                  </button>
+                )}
               </div>
 
               {mensajeRespaldos && (
@@ -408,14 +447,15 @@ function App() {
                 </p>
               )}
 
-              {respaldos.length > 0 ? (
+              {copiasVisibles.length > 0 ? (
                 <div className="copias-grid">
-                  {respaldos.map((respaldo) => (
+                  {copiasVisibles.map((respaldo) => (
                     <BackupCard
                       key={respaldo.id}
                       respaldo={respaldo}
                       ahora={ahora}
                       ejecutando={ejecucionesActivas.has(respaldo.id)}
+                      resaltada={copiaResaltada === respaldo.id}
                       alVerHistorial={(seleccionado) => setRespaldoHistorial(seleccionado)}
                       alEliminar={(seleccionado) => setRespaldoEliminar(seleccionado)}
                       alAlternarActivo={(seleccionado) => void alAlternarActivo(seleccionado)}
@@ -423,6 +463,14 @@ function App() {
                       alAbrirMenuContextual={abrirMenuContextual}
                     />
                   ))}
+                </div>
+              ) : filtroCopias !== 'todas' ? (
+                <div className="copias-vacio">
+                  <strong>{filtroCopias === 'error' ? 'No hay tareas con error' : 'No hay tareas activas'}</strong>
+                  <p>El filtro aplicado no deja ninguna copia visible.</p>
+                  <button className="boton boton--secundario" type="button" onClick={() => navegarASeccion('seccion-copias')}>
+                    Ver todas
+                  </button>
                 </div>
               ) : (
                 !cargando &&
@@ -441,7 +489,7 @@ function App() {
         </div>
       </div>
 
-      {seccionActiva === 'seccion-copias' && (
+      {seccionActiva !== 'seccion-informes' && (
         <button
           type="button"
           className="boton-flotante"

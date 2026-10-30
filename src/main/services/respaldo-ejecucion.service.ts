@@ -46,13 +46,47 @@ async function existeRuta(ruta: string): Promise<boolean> {
   }
 }
 
+// Cuenta archivos y bytes del origen antes de copiar, para las métricas del historial.
+async function medirOrigen(ruta: string): Promise<{ archivos: number; bytes: number }> {
+  const info = await fs.stat(ruta);
+
+  if (!info.isDirectory()) {
+    return { archivos: 1, bytes: info.size };
+  }
+
+  let archivos = 0;
+  let bytes = 0;
+  const pendientes = [ruta];
+
+  while (pendientes.length > 0) {
+    const actual = pendientes.pop() as string;
+    const entradas = await fs.readdir(actual, { withFileTypes: true });
+
+    for (const entrada of entradas) {
+      const rutaHija = path.join(actual, entrada.name);
+
+      if (entrada.isDirectory()) {
+        pendientes.push(rutaHija);
+      } else if (entrada.isFile()) {
+        archivos += 1;
+        bytes += (await fs.stat(rutaHija)).size;
+      }
+    }
+  }
+
+  return { archivos, bytes };
+}
+
 interface OrigenRespaldo {
   ruta: string;
   esCarpeta: boolean;
 }
 
-// Valida origen/destino y devuelve el origen tipado junto al destino absoluto.
-async function prepararRutas(respaldo: RespaldoConfigurado): Promise<{ origen: OrigenRespaldo; destino: string }> {
+// Valida origen/destino y devuelve el origen tipado, el destino absoluto y el
+// prefijo del nombre generado (el del origen, no el de la tarea).
+async function prepararRutas(
+  respaldo: RespaldoConfigurado,
+): Promise<{ origen: OrigenRespaldo; destino: string; prefijo: string }> {
   const rutaOrigen = path.resolve(respaldo.origen);
   const destino = path.resolve(respaldo.destino);
 
@@ -78,13 +112,28 @@ async function prepararRutas(respaldo: RespaldoConfigurado): Promise<{ origen: O
 
   await fs.mkdir(destino, { recursive: true });
 
-  return { origen: { ruta: rutaOrigen, esCarpeta }, destino };
+  // La carpeta conserva su nombre; el archivo pierde la extensión para no
+  // duplicarla al añadir la fecha: backuparc.msi → backuparc_20261030110200.msi
+  const base = esCarpeta
+    ? path.basename(rutaOrigen)
+    : path.basename(rutaOrigen, path.extname(rutaOrigen));
+
+  return {
+    origen: { ruta: rutaOrigen, esCarpeta },
+    destino,
+    prefijo: slug(base),
+  };
 }
 
-async function copiarOrigen(respaldo: RespaldoConfigurado, fecha: Date): Promise<string> {
-  const { origen, destino } = await prepararRutas(respaldo);
-  const prefijo = slug(respaldo.nombre);
-  const nombreBase = respaldo.copiaConFecha ? `${prefijo}_${marcaTiempo(fecha)}` : prefijo;
+async function copiarOrigen(
+  respaldo: RespaldoConfigurado,
+  fecha: Date,
+): Promise<{ ruta: string; prefijo: string }> {
+  const { origen, destino, prefijo } = await prepararRutas(respaldo);
+  // Carpetas: nombre20261030105000 · Archivos: nombre_20261030110200.msi
+  const nombreBase = respaldo.copiaConFecha
+    ? `${prefijo}${origen.esCarpeta ? '' : '_'}${marcaTiempo(fecha)}`
+    : prefijo;
 
   if (origen.esCarpeta) {
     let rutaCopia = path.join(destino, nombreBase);
@@ -104,7 +153,7 @@ async function copiarOrigen(respaldo: RespaldoConfigurado, fecha: Date): Promise
 
     await fs.cp(origen.ruta, rutaCopia, { recursive: true, force: true, errorOnExist: false });
 
-    return rutaCopia;
+    return { ruta: rutaCopia, prefijo };
   }
 
   // Archivo suelto: se conserva su extensión y se copia como un único archivo.
@@ -125,7 +174,7 @@ async function copiarOrigen(respaldo: RespaldoConfigurado, fecha: Date): Promise
 
   await fs.copyFile(origen.ruta, rutaCopia);
 
-  return rutaCopia;
+  return { ruta: rutaCopia, prefijo };
 }
 
 function empaquetar(origen: OrigenRespaldo, rutaSalida: string): Promise<void> {
@@ -158,10 +207,15 @@ function empaquetar(origen: OrigenRespaldo, rutaSalida: string): Promise<void> {
   });
 }
 
-async function comprimirOrigen(respaldo: RespaldoConfigurado, fecha: Date): Promise<string> {
-  const { origen, destino } = await prepararRutas(respaldo);
-  const prefijo = slug(respaldo.nombre);
-  const nombreBase = respaldo.copiaConFecha ? `${prefijo}_${marcaTiempo(fecha)}` : prefijo;
+async function comprimirOrigen(
+  respaldo: RespaldoConfigurado,
+  fecha: Date,
+): Promise<{ ruta: string; prefijo: string }> {
+  const { origen, destino, prefijo } = await prepararRutas(respaldo);
+  // Carpetas: nombre20261030105000.zip · Archivos: nombre_20261030110200.zip
+  const nombreBase = respaldo.copiaConFecha
+    ? `${prefijo}${origen.esCarpeta ? '' : '_'}${marcaTiempo(fecha)}`
+    : prefijo;
   let rutaZip = path.join(destino, `${nombreBase}.zip`);
 
   if (respaldo.copiaConFecha) {
@@ -183,8 +237,11 @@ async function comprimirOrigen(respaldo: RespaldoConfigurado, fecha: Date): Prom
     throw error;
   }
 
-  return rutaZip;
+  return { ruta: rutaZip, prefijo };
 }
+
+// Nombre que crea la app: <prefijo>[_]<14 dígitos>[-desambiguación][.extensión].
+const PATRON_COPIA_CON_FECHA = /^_?\d{14}(-\d+)?(\.[^.\\/]+)?$/;
 
 async function aplicarRetencion(destino: string, prefijo: string, retencionDias: number): Promise<void> {
   const limite = Date.now() - retencionDias * 24 * 60 * 60 * 1000;
@@ -192,7 +249,8 @@ async function aplicarRetencion(destino: string, prefijo: string, retencionDias:
 
   for (const entrada of entradas) {
     // Aplica a carpetas, .zip y archivos sueltos creados con fecha.
-    const esCopiaConFecha = entrada.name.startsWith(`${prefijo}_`);
+    const resto = entrada.name.startsWith(prefijo) ? entrada.name.slice(prefijo.length) : '';
+    const esCopiaConFecha = PATRON_COPIA_CON_FECHA.test(resto);
 
     if (!esCopiaConFecha || (!entrada.isDirectory() && !entrada.isFile())) {
       continue;
@@ -289,7 +347,17 @@ async function ejecutarRespaldoInterno(respaldo: RespaldoConfigurado): Promise<v
         estado,
         detalle,
         inicio.toISOString(),
-        { tipo: tipoResumen, runId },
+        {
+          tipo: tipoResumen,
+          runId,
+          duracionMs: Date.now() - inicio.getTime(),
+          archivos: resultados.filter((resultado) => resultado.archivo !== null).length,
+          bytes: resultados.reduce(
+            (total, resultado) =>
+              total + (resultado.archivo !== null ? (resultado.tamanoBytes ?? 0) : 0),
+            0,
+          ),
+        },
       );
       registrarResultadosBase(ejecucionId, resultados);
       actualizarEstadoRespaldo(respaldo.id, estado, inicio.toISOString(), proximaEjecucion);
@@ -304,16 +372,19 @@ async function ejecutarRespaldoInterno(respaldo: RespaldoConfigurado): Promise<v
       return;
     }
 
-    const rutaCopia = respaldo.comprimir
+    // Las métricas se miden antes de copiar: el origen puede cambiar durante la copia.
+    const metricas = await medirOrigen(respaldo.origen).catch(() => null);
+    const copia = respaldo.comprimir
       ? await comprimirOrigen(respaldo, inicio)
       : await copiarOrigen(respaldo, inicio);
+    const rutaCopia = copia.ruta;
 
     // La retención solo aplica a los archivos que copia la propia aplicación;
     // los .bak viven en el servidor SQL y se administran allí.
     try {
       await aplicarRetencion(
         path.resolve(respaldo.destino),
-        slug(respaldo.nombre),
+        copia.prefijo,
         respaldo.retencionDias,
       );
     } catch (error) {
@@ -325,6 +396,12 @@ async function ejecutarRespaldoInterno(respaldo: RespaldoConfigurado): Promise<v
       'ok',
       `Copia completada en ${rutaCopia}`,
       inicio.toISOString(),
+      {
+        duracionMs: Date.now() - inicio.getTime(),
+        archivos: metricas?.archivos ?? null,
+        bytes: metricas?.bytes ?? null,
+        ubicacion: rutaCopia,
+      },
     );
     actualizarEstadoRespaldo(respaldo.id, 'ok', inicio.toISOString(), proximaEjecucion);
     logger.info(`Copia "${respaldo.nombre}" completada`, rutaCopia);
@@ -336,7 +413,9 @@ async function ejecutarRespaldoInterno(respaldo: RespaldoConfigurado): Promise<v
     const mensaje = error instanceof Error ? error.message : String(error);
 
     logger.error(`Falló la copia "${respaldo.nombre}"`, error);
-    registrarEjecucionRespaldo(respaldo.id, 'error', mensaje, inicio.toISOString());
+    registrarEjecucionRespaldo(respaldo.id, 'error', mensaje, inicio.toISOString(), {
+      duracionMs: Date.now() - inicio.getTime(),
+    });
     actualizarEstadoRespaldo(respaldo.id, 'error', inicio.toISOString(), proximaEjecucion);
 
     throw error;

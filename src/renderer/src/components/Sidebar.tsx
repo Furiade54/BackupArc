@@ -1,3 +1,4 @@
+import type { ComponentType } from 'react';
 import './Sidebar.css';
 
 interface SidebarProps {
@@ -8,6 +9,17 @@ interface SidebarProps {
   alAbrirConfiguracion: () => void;
 }
 
+interface ItemNavegacion {
+  id: string;
+  etiqueta: string;
+  Icono: ComponentType;
+}
+
+interface GrupoNavegacion {
+  rotulo?: string;
+  items: ItemNavegacion[];
+}
+
 function IconoPanel() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
@@ -15,6 +27,27 @@ function IconoPanel() {
       <rect x="9.5" y="1.5" width="5" height="5" rx="1" fill="none" stroke="currentColor" strokeWidth="1.1" />
       <rect x="1.5" y="9.5" width="5" height="5" rx="1" fill="none" stroke="currentColor" strokeWidth="1.1" />
       <rect x="9.5" y="9.5" width="5" height="5" rx="1" fill="none" stroke="currentColor" strokeWidth="1.1" />
+    </svg>
+  );
+}
+
+function IconoCopias() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M3 2.5h8.2L13.5 4.8V13a.5.5 0 0 1-.5.5H3a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5.2 2.5v3.2h5V2.5M5.2 13.5V9.6h5.6v3.9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -45,9 +78,18 @@ function IconoInformes() {
   );
 }
 
-const SECCIONES = [
-  { id: 'seccion-copias', etiqueta: 'Copias', Icono: IconoPanel },
-  { id: 'seccion-informes', etiqueta: 'Informes', Icono: IconoInformes },
+// Los grupos siguen las responsabilidades: operar, analizar y administrar.
+const GRUPOS: GrupoNavegacion[] = [
+  {
+    items: [
+      { id: 'seccion-panel', etiqueta: 'Panel de control', Icono: IconoPanel },
+      { id: 'seccion-copias', etiqueta: 'Copias', Icono: IconoCopias },
+    ],
+  },
+  {
+    rotulo: 'Análisis',
+    items: [{ id: 'seccion-informes', etiqueta: 'Informes', Icono: IconoInformes }],
+  },
 ];
 
 export function Sidebar({
@@ -66,39 +108,42 @@ export function Sidebar({
       inert={!abierto}
     >
       <div className="navegacion__contenido">
-        <p className="navegacion__titulo">Secciones</p>
-
         <nav>
-          <ul className="navegacion__lista">
-            {SECCIONES.map(({ id, etiqueta, Icono }) => {
-              const activa = seccionActiva === id;
+          {GRUPOS.map((grupo, indice) => (
+            <div key={grupo.rotulo ?? `grupo-${indice}`} className="navegacion__grupo">
+              {grupo.rotulo && <p className="navegacion__rotulo">{grupo.rotulo}</p>}
 
-              return (
-                <li key={id}>
-                  <button
-                    type="button"
-                    className={`navegacion__enlace${activa ? ' navegacion__enlace--activo' : ''}`}
-                    aria-current={activa ? 'page' : undefined}
-                    onClick={() => alNavegar(id)}
-                  >
-                    <Icono />
-                    {etiqueta}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+              <ul className="navegacion__lista">
+                {grupo.items.map(({ id, etiqueta, Icono }) => {
+                  const activa = seccionActiva === id;
+
+                  return (
+                    <li key={etiqueta}>
+                      <button
+                        type="button"
+                        className={`navegacion__enlace${activa ? ' navegacion__enlace--activo' : ''}`}
+                        aria-current={activa ? 'page' : undefined}
+                        onClick={() => alNavegar(id)}
+                      >
+                        <Icono />
+                        {etiqueta}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
         </nav>
 
         <div className="navegacion__pie">
           <button
             type="button"
-            className="navegacion__ajustes"
-            aria-label="Abrir configuración avanzada"
-            title="Configuración avanzada"
+            className="navegacion__enlace"
             onClick={alAbrirConfiguracion}
           >
             <IconoAjustes />
+            Configuración
           </button>
           <p className="navegacion__version">BackupArc {version}</p>
         </div>

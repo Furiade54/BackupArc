@@ -18,6 +18,8 @@ interface BackupCardProps {
   alAlternarActivo: (respaldo: RespaldoConfigurado) => void;
   alEditar: (respaldo: RespaldoConfigurado) => void;
   alAbrirMenuContextual: (respaldo: RespaldoConfigurado, posicion: { x: number; y: number }) => void;
+  /** La tarjeta se abrió desde un acceso directo del panel. */
+  resaltada?: boolean;
 }
 
 type EstadoBarra = 'reciente' | 'media' | 'porVencer' | 'vencida' | 'deshabilitado';
@@ -86,6 +88,7 @@ export function BackupCard({
   alAlternarActivo,
   alEditar,
   alAbrirMenuContextual,
+  resaltada = false,
 }: BackupCardProps) {
   const inicioCiclo = respaldo.ultimaEjecucion ?? respaldo.creadoEn;
   // La barra mide el tiempo transcurrido desde la última ejecución (o desde la
@@ -135,7 +138,7 @@ export function BackupCard({
     <article
       className={`tarjeta-respaldo${respaldo.habilitado ? '' : ' tarjeta-respaldo--deshabilitada'}${
         ejecutando ? ' tarjeta-respaldo--ejecutando' : ''
-      }`}
+      }${resaltada ? ' tarjeta-respaldo--resaltada' : ''}`}
       aria-busy={ejecutando}
       onContextMenu={(evento) => {
         evento.preventDefault();
@@ -158,7 +161,7 @@ export function BackupCard({
           </h3>
           <p
             className="tarjeta-respaldo__base"
-            title={`Origen: ${origenVisible}\nDestino: ${respaldo.destino}`}
+            title={`${respaldo.tipo === 'mssql' ? 'Bases de datos' : 'Carpeta de origen'}: ${origenVisible}\nUbicación del backup: ${respaldo.destino}`}
           >
             {origenVisible}
           </p>

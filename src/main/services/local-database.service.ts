@@ -155,6 +155,12 @@ export function inicializarBaseDatosLocal(): void {
       fecha TEXT NOT NULL,
       estado TEXT NOT NULL,
       detalle TEXT,
+      tipo TEXT,
+      run_id TEXT,
+      duracion_ms INTEGER,
+      archivos INTEGER,
+      bytes INTEGER,
+      ubicacion TEXT,
       FOREIGN KEY (respaldo_id) REFERENCES respaldos(id) ON DELETE CASCADE
     );
 
@@ -269,6 +275,23 @@ export function inicializarBaseDatosLocal(): void {
 
     if (!columnasEjecuciones.some((columna) => columna.name === 'run_id')) {
       conexion.exec('ALTER TABLE ejecuciones_respaldo ADD COLUMN run_id TEXT');
+    }
+
+    // Métricas de la corrida: se añadieron después y solo existen en ejecuciones nuevas.
+    if (!columnasEjecuciones.some((columna) => columna.name === 'duracion_ms')) {
+      conexion.exec('ALTER TABLE ejecuciones_respaldo ADD COLUMN duracion_ms INTEGER');
+    }
+
+    if (!columnasEjecuciones.some((columna) => columna.name === 'archivos')) {
+      conexion.exec('ALTER TABLE ejecuciones_respaldo ADD COLUMN archivos INTEGER');
+    }
+
+    if (!columnasEjecuciones.some((columna) => columna.name === 'bytes')) {
+      conexion.exec('ALTER TABLE ejecuciones_respaldo ADD COLUMN bytes INTEGER');
+    }
+
+    if (!columnasEjecuciones.some((columna) => columna.name === 'ubicacion')) {
+      conexion.exec('ALTER TABLE ejecuciones_respaldo ADD COLUMN ubicacion TEXT');
     }
 
     conexion.exec(`

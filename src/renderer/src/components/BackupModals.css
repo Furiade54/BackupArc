@@ -743,19 +743,37 @@
   white-space: nowrap;
 }
 
-.resumen-respaldo__ruta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+/* Una fila que necesita todo el ancho del resumen (opciones largas). */
+.resumen-respaldo__ancho {
+  grid-column: span 2;
 }
 
-.resumen-respaldo__ruta span {
+/* Ruta con acciones de copiar y abrir, reutilizada en toda la vista. */
+.ruta-copiable {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ruta-copiable__texto {
+  min-width: 0;
   overflow: hidden;
+  color: var(--texto-suave);
+  font-family: Consolas, 'Cascadia Mono', monospace;
+  font-size: var(--texto-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.resumen-respaldo__abrir {
+.ruta-copiable__aviso {
+  flex: none;
+  color: var(--aviso-texto);
+  font-size: var(--texto-xs);
+}
+
+.boton-copiar,
+.ruta-copiable__abrir {
   display: grid;
   place-items: center;
   flex: none;
@@ -770,26 +788,23 @@
   transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 
-.resumen-respaldo__abrir:hover {
+.boton-copiar:hover,
+.ruta-copiable__abrir:hover {
   border-color: color-mix(in srgb, var(--acento) 45%, var(--borde));
   background: color-mix(in srgb, var(--acento) 16%, transparent);
   color: var(--texto);
 }
 
-.resumen-respaldo__abrir:focus-visible {
+.boton-copiar:focus-visible,
+.ruta-copiable__abrir:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--acento);
 }
 
-.resumen-respaldo__abrir:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.resumen-respaldo__abrir:disabled:hover {
-  border-color: var(--borde);
-  background: color-mix(in srgb, var(--texto) 5%, transparent);
-  color: var(--texto-suave);
+.boton-copiar--copiado {
+  border-color: color-mix(in srgb, var(--ok) 55%, var(--borde));
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+  color: var(--ok-texto);
 }
 
 .historial__titulo {
@@ -799,6 +814,13 @@
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+/* Bloques de la vista: configuración, estado e historial. */
+.historial__seccion + .historial__seccion {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--borde);
 }
 
 .historial__cabecera {
@@ -815,10 +837,26 @@
 
 .historial__confirmacion {
   display: flex;
-  align-items: baseline;
+  flex-direction: column;
   gap: 10px;
-  color: var(--texto-suave);
-  font-size: var(--texto-xs);
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--error) 45%, var(--borde));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--error) 8%, transparent);
+}
+
+.historial__confirmacion p {
+  margin: 0;
+  color: var(--texto);
+  font-size: var(--texto-sm);
+  line-height: 1.5;
+}
+
+.historial__confirmacion-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .boton-texto {
@@ -855,53 +893,68 @@
 
 .historial__item {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px 12px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
   border: 1px solid var(--borde);
   border-radius: 9px;
   background: color-mix(in srgb, var(--fondo-panel-suave) 55%, transparent);
+  transition: border-color 0.12s ease, background 0.12s ease;
 }
 
-.historial__item--abrible {
-  cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
-}
-
-.historial__item--abrible:hover,
-.historial__item--abrible:focus-visible {
+.historial__item--abierta {
   border-color: color-mix(in srgb, var(--acento) 40%, var(--borde));
-  background: color-mix(in srgb, var(--acento) 8%, transparent);
+  background: color-mix(in srgb, var(--acento) 7%, transparent);
 }
 
-.historial__item--abrible:focus-visible {
+/* La fila completa es el disparador del acordeón. */
+.historial__resumen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  row-gap: 4px;
+  width: 100%;
+  padding: 2px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.historial__resumen:hover .historial__chevron {
+  color: var(--acento);
+}
+
+.historial__resumen:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--acento);
 }
 
-.historial__acciones {
-  display: flex;
-  align-items: center;
-  align-self: flex-start;
-  gap: 8px;
-}
-
-.historial__abrir {
-  display: grid;
-  place-items: center;
+.historial__metricas {
+  flex: none;
   color: var(--texto-suave);
-  transition: color 0.12s ease;
+  font-size: var(--texto-xs);
+  white-space: nowrap;
 }
 
-.historial__item--abrible:hover .historial__abrir {
-  color: var(--acento);
+.historial__chevron {
+  flex: none;
+  color: var(--texto-suave);
+  transition: transform 0.15s ease, color 0.12s ease;
+}
+
+.historial__chevron--abierto {
+  transform: rotate(180deg);
 }
 
 .historial__punto {
   flex: none;
   width: 8px;
   height: 8px;
-  margin-top: 5px;
   border-radius: 50%;
   background: #64748b;
 }
@@ -923,14 +976,21 @@
 }
 
 .historial__detalle-contenedor {
-  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
   min-width: 0;
+  padding: 2px 2px 2px 18px;
 }
 
 .historial__fecha {
-  margin: 0;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
   color: var(--texto);
   font-size: var(--texto-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .historial__detalle {
@@ -1062,7 +1122,7 @@
   line-height: 1.45;
 }
 
-/* Informe de respaldos por fecha: solo lectura sobre msdb. */
+/* Informe de respaldos por fecha: msdb (MSSQL) e historial local (archivos). */
 .informe {
   margin-top: 18px;
   padding-top: 14px;
@@ -1088,6 +1148,20 @@
   margin-top: 12px;
 }
 
+.informe__veredicto-fila {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.informe__veredicto-fila .informe__veredicto {
+  flex: 1 1 320px;
+  margin: 0;
+}
+
 .informe__veredicto {
   margin: 0 0 10px;
   padding: 9px 11px;
@@ -1110,6 +1184,49 @@
   border-left-color: var(--aviso);
   background: color-mix(in srgb, var(--aviso) 10%, transparent);
   color: var(--aviso-texto);
+}
+
+/* Resumen general del informe: una tarjeta por sistema de respaldo. */
+.informe__general {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.informe__general-fuente {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--texto) 3%, transparent);
+}
+
+.informe__general-etiqueta {
+  color: var(--texto-suave);
+  font-size: var(--texto-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.informe__general-valor {
+  font-size: var(--texto-xl);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.informe__general-detalle {
+  color: var(--texto-suave);
+  font-size: var(--texto-xs);
+  line-height: 1.45;
+}
+
+.informe__general-fuente--vacia {
+  border-style: dashed;
+  opacity: 0.75;
 }
 
 .informe__resumen {
@@ -1141,11 +1258,210 @@
   white-space: nowrap;
 }
 
+/* Calendario de cobertura: una barra por día del rango consultado. */
+.cobertura {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--fondo-panel-suave) 45%, transparent);
+}
+
+.cobertura__cabecera {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-bottom: 10px;
+}
+
+.cobertura__titulo {
+  margin: 0;
+  font-size: var(--texto-md);
+  font-weight: 600;
+}
+
+.cobertura__rango {
+  margin-right: auto;
+  color: var(--texto-suave);
+  font-size: var(--texto-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cobertura__badge {
+  padding: 3px 10px;
+  border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  color: var(--ok-texto);
+  font-size: var(--texto-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cobertura__badge--aviso {
+  border-color: color-mix(in srgb, var(--aviso) 48%, transparent);
+  background: color-mix(in srgb, var(--aviso) 14%, transparent);
+  color: var(--aviso-texto);
+}
+
+.cobertura__dias {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.cobertura__dia {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 9px;
+}
+
+.cobertura__barra {
+  width: 100%;
+  height: 9px;
+  border-radius: 999px;
+  transition: filter 0.12s ease;
+}
+
+.cobertura__dia:hover .cobertura__barra {
+  filter: brightness(1.25);
+}
+
+.cobertura__barra--ok {
+  background: var(--ok);
+}
+
+.cobertura__barra--falta {
+  background: var(--error);
+}
+
+.cobertura__etiqueta {
+  color: var(--texto-suave);
+  font-size: var(--texto-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.cobertura__leyenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 10px;
+  color: var(--texto-suave);
+  font-size: var(--texto-xs);
+}
+
+.cobertura__leyenda > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cobertura__punto {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.cobertura__punto--ok {
+  background: var(--ok);
+}
+
+.cobertura__punto--falta {
+  background: var(--error);
+}
+
 .informe__huecos {
   margin: 0 0 10px;
   color: var(--texto-suave);
   font-size: var(--texto-xs);
   line-height: 1.5;
+}
+
+/* Ventana de detalle: el listado completo vive aquí, fuera de la vista. */
+.modal--detalle {
+  width: min(860px, 100%);
+}
+
+.info-detalle__bloque + .info-detalle__bloque {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--borde);
+}
+
+.info-detalle__bloque .informes__subtitulo {
+  margin-top: 0;
+}
+
+/* Agrupación de respaldos equivalentes dentro de un día. */
+.informe__grupos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.informe__grupo {
+  padding: 8px 10px;
+  border: 1px solid var(--borde);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--texto) 3%, transparent);
+}
+
+.informe__grupo-cabecera {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.informe__grupo-cabecera:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--acento);
+}
+
+.informe__grupo-rango {
+  color: var(--texto);
+  font-size: var(--texto-sm);
+}
+
+.informe__grupo-cuenta {
+  color: var(--texto-suave);
+  font-size: var(--texto-xs);
+}
+
+.informe__chevron {
+  flex: none;
+  margin-left: auto;
+  color: var(--texto-suave);
+  transition: transform 0.15s ease;
+}
+
+.informe__chevron--abierto {
+  transform: rotate(180deg);
+}
+
+.informe__grupos .informe__archivos {
+  margin-top: 8px;
 }
 
 .informe__dias {

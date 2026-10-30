@@ -34,4 +34,5 @@ export const IPC_CHANNELS = {
   RESPALDOS_INVENTARIO_BAK: 'respaldos:inventario-bak',
   RESPALDOS_INFORME_BAK: 'respaldos:informe-bak',
   RESPALDOS_INFORME_GLOBAL: 'respaldos:informe-global',
+  RESPALDOS_RESUMEN_EJECUCIONES: 'respaldos:resumen-ejecuciones',
 } as const;

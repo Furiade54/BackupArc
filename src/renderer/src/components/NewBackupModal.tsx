@@ -420,7 +420,7 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
       titulo: todasLasBases ? undefined : basesDatos.join(', ') || undefined,
     });
     filasResumen.push({
-      etiqueta: 'Destino del .bak',
+      etiqueta: 'Ubicación del .bak',
       valor: destino.trim() || 'Sin definir',
       titulo: destino.trim() || undefined,
     });
@@ -433,12 +433,12 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
     }
   } else {
     filasResumen.push({
-      etiqueta: 'Origen',
+      etiqueta: 'Carpeta de origen',
       valor: origen.trim() || 'Sin definir',
       titulo: origen.trim() || undefined,
     });
     filasResumen.push({
-      etiqueta: 'Destino',
+      etiqueta: 'Ubicación del backup',
       valor: destino.trim() || 'Sin definir',
       titulo: destino.trim() || undefined,
     });
@@ -802,7 +802,7 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                 ) : (
                   <>
                     <div className="campo">
-                      <label htmlFor="backup-origen">Origen</label>
+                      <label htmlFor="backup-origen">Carpeta de origen</label>
                       <div className="campo__ruta">
                         <input
                           id="backup-origen"
@@ -839,7 +839,7 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                     </div>
 
                     <div className="campo">
-                      <label htmlFor="backup-destino">Destino</label>
+                      <label htmlFor="backup-destino">Ubicación del backup</label>
                       <div className="campo__ruta">
                         <input
                           id="backup-destino"

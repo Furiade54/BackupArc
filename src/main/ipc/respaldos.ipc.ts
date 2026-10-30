@@ -5,6 +5,7 @@ import { esBaseDeSistema } from '../../shared/utils/bases-datos';
 import type {
   ConexionMssql,
   EjecucionRespaldo,
+  EjecucionesRegistradasInforme,
   FiltroInformeBak,
   InformeBak,
   InformeGlobalBak,
@@ -16,6 +17,7 @@ import type {
 } from '../../shared/types/respaldo.types';
 import {
   actualizarRespaldo,
+  consultarEjecucionesRegistradas,
   crearRespaldo,
   eliminarRespaldo,
   establecerActivoRespaldo,
@@ -493,6 +495,20 @@ export function registrarIpcRespaldos(): void {
       try {
         validarRemitente(evento);
         return { ok: true, datos: await consultarInformeGlobalBak(validarFiltroInforme(filtro)) };
+      } catch (error) {
+        return { ok: false, error: mensajeError(error) };
+      }
+    },
+  );
+
+  // Resumen liviano para el panel: sale de la base local y no consulta SQL Server.
+  ipcMain.handle(
+    IPC_CHANNELS.RESPALDOS_RESUMEN_EJECUCIONES,
+    async (evento, filtro: unknown): Promise<ResultadoIpc<EjecucionesRegistradasInforme>> => {
+      try {
+        validarRemitente(evento);
+        const rango = validarFiltroInforme(filtro);
+        return { ok: true, datos: consultarEjecucionesRegistradas(rango.desde, rango.hasta) };
       } catch (error) {
         return { ok: false, error: mensajeError(error) };
       }

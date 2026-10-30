@@ -2,6 +2,7 @@ import type { ArchivoRespaldo } from './archivo.types';
 import type {
   ConexionMssql,
   EjecucionRespaldo,
+  EjecucionesRegistradasInforme,
   FiltroInformeBak,
   InformeBak,
   InformeGlobalBak,
@@ -143,6 +144,10 @@ export interface ApiElectron {
     inventarioBak: (id: number) => Promise<ResultadoIpc<InventarioBak>>;
     informeBak: (id: number, filtro: FiltroInformeBak) => Promise<ResultadoIpc<InformeBak>>;
     informeGlobal: (filtro: FiltroInformeBak) => Promise<ResultadoIpc<InformeGlobalBak>>;
+    /** Conteo de corridas registradas en el rango, sin consultar SQL Server. */
+    resumenEjecuciones: (
+      filtro: FiltroInformeBak,
+    ) => Promise<ResultadoIpc<EjecucionesRegistradasInforme>>;
   };
   archivos: {
     listar: (limite?: number) => Promise<ResultadoIpc<ArchivoRespaldo[]>>;

@@ -25,53 +25,28 @@
 
 .navegacion__pie {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
   margin-top: auto;
-  padding: 2px 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--borde);
 }
 
 .navegacion__version {
   margin: 0;
-  color: #64748b;
+  padding: 0 10px;
+  color: var(--texto-suave);
   font-size: var(--texto-xs);
 }
 
-.navegacion__ajustes {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--texto-suave);
-  cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+.navegacion__grupo + .navegacion__grupo {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--borde);
 }
 
-.navegacion__ajustes:hover {
-  background: color-mix(in srgb, var(--texto) 8%, transparent);
-  color: var(--texto);
-}
-
-.navegacion__ajustes svg {
-  transition: transform 0.18s ease;
-}
-
-.navegacion__ajustes:hover svg {
-  transform: rotate(35deg);
-}
-
-.navegacion__ajustes:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 2px var(--acento);
-}
-
-.navegacion__titulo {
-  margin: 0 8px 8px;
+.navegacion__rotulo {
+  margin: 0 8px 6px;
   color: var(--texto-suave);
   font-size: var(--texto-xs);
   font-weight: 600;
@@ -117,6 +92,7 @@
 .navegacion__enlace--activo {
   background: color-mix(in srgb, var(--acento) 15%, transparent);
   color: var(--texto);
+  box-shadow: inset 2px 0 0 var(--acento);
 }
 
 .navegacion__enlace--activo svg {
@@ -129,9 +105,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .navegacion,
-  .navegacion__enlace,
-  .navegacion__ajustes,
-  .navegacion__ajustes svg {
+  .navegacion__enlace {
     transition: none;
   }
 }

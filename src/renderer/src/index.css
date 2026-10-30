@@ -18,7 +18,7 @@
   --ok-texto: #bbf7d0;
   --aviso: #f59e0b;
   --aviso-texto: #fde68a;
-  --error: #ef4444;
+  --error: #f43f5e;
   --error-texto: #fecaca;
   --info: #8ddcfa;
   --info-texto: #c7edfa;
@@ -80,6 +80,25 @@ button {
   margin: 0 auto;
   padding: 30px 32px 24px;
   overflow-y: auto;
+  position: relative;
+  isolation: isolate;
+}
+
+/* Marca de agua del logo: solo textura, nunca intercepta clics. */
+.app::before {
+  content: '';
+  position: fixed;
+  right: 9%;
+  bottom: 5%;
+  width: min(46vw, 480px);
+  aspect-ratio: 1;
+  background: var(--marca-agua) center / contain no-repeat;
+  opacity: 0.095;
+  pointer-events: none;
+  z-index: -1;
+
+  transform: rotate(25deg);
+  transform-origin: center;
 }
 
 .seccion {
@@ -237,6 +256,7 @@ button {
   display: flex;
   align-items: center;
   gap: 9px;
+  margin: 0;
   color: var(--texto-suave);
   font-size: var(--texto-xs);
   font-weight: 600;

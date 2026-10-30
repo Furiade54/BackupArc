@@ -50,11 +50,39 @@ export function formatearFechaHora(valor: string): string {
   return `${formatearFecha(valor)} · ${formatoHora.format(fecha)}`;
 }
 
+// Duración de una corrida: "8 s", "2 min 5 s", "1 h 12 min".
+export function formatearDuracionMs(ms: number | null): string {
+  if (ms === null || !Number.isFinite(ms)) {
+    return '—';
+  }
+
+  const segundosTotales = Math.max(0, Math.round(ms / 1000));
+
+  if (segundosTotales < 1) {
+    return 'menos de 1 s';
+  }
+
+  if (segundosTotales < 60) {
+    return `${segundosTotales} s`;
+  }
+
+  const minutos = Math.floor(segundosTotales / 60);
+  const segundos = segundosTotales % 60;
+
+  if (minutos < 60) {
+    return segundos === 0 ? `${minutos} min` : `${minutos} min ${segundos} s`;
+  }
+
+  const horas = Math.floor(minutos / 60);
+  const restoMinutos = minutos % 60;
+
+  return restoMinutos === 0 ? `${horas} h` : `${horas} h ${restoMinutos} min`;
+}
+
 export function formatearFrecuencia(minutos: number): string {
   if (!Number.isFinite(minutos) || minutos <= 0) {
     return '—';
   }
-
   if (minutos < 60) {
     return `cada ${minutos} min`;
   }

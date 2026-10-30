@@ -3,6 +3,7 @@ import type {
   ConexionMssql,
   EjecucionArchivoInforme,
   EjecucionRespaldo,
+  EjecucionesRegistradasInforme,
   EstadoRespaldo,
   ModoRespaldoMssql,
   NuevoRespaldo,
@@ -60,6 +61,10 @@ interface FilaEjecucion {
   detalle: string | null;
   tipo: string | null;
   run_id: string | null;
+  duracion_ms: number | null;
+  archivos: number | null;
+  bytes: number | null;
+  ubicacion: string | null;
 }
 
 interface FilaResultadoBase {
@@ -421,12 +426,22 @@ export function registrarEjecucionRespaldo(
   estado: EstadoRespaldo,
   detalle: string | null,
   fecha: string,
-  opciones: { tipo?: string | null; runId?: string | null } = {},
+  opciones: {
+    tipo?: string | null;
+    runId?: string | null;
+    duracionMs?: number | null;
+    archivos?: number | null;
+    bytes?: number | null;
+    ubicacion?: string | null;
+  } = {},
 ): number {
   const resultado = obtenerBaseDatosLocal()
     .prepare(`
-      INSERT INTO ejecuciones_respaldo (respaldo_id, fecha, estado, detalle, tipo, run_id)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO ejecuciones_respaldo (
+        respaldo_id, fecha, estado, detalle, tipo, run_id,
+        duracion_ms, archivos, bytes, ubicacion
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     .run(
       respaldoId,
@@ -435,6 +450,10 @@ export function registrarEjecucionRespaldo(
       detalle,
       opciones.tipo ?? null,
       opciones.runId ?? null,
+      opciones.duracionMs ?? null,
+      opciones.archivos ?? null,
+      opciones.bytes ?? null,
+      opciones.ubicacion ?? null,
     );
 
   return Number(resultado.lastInsertRowid);
@@ -586,7 +605,8 @@ export function listarHistorialRespaldo(id: number): EjecucionRespaldo[] {
 
   const filas = baseDatos
     .prepare(`
-      SELECT id, fecha, estado, detalle, tipo, run_id
+      SELECT id, fecha, estado, detalle, tipo, run_id,
+             duracion_ms, archivos, bytes, ubicacion
       FROM ejecuciones_respaldo
       WHERE respaldo_id = ?
       ORDER BY fecha DESC
@@ -637,6 +657,10 @@ export function listarHistorialRespaldo(id: number): EjecucionRespaldo[] {
     detalle: fila.detalle,
     tipo: fila.tipo,
     runId: fila.run_id,
+    duracionMs: fila.duracion_ms,
+    archivos: fila.archivos,
+    bytes: fila.bytes,
+    ubicacion: fila.ubicacion,
     resultados: resultadosPorEjecucion.get(fila.id) ?? [],
   }));
 }
@@ -686,16 +710,70 @@ function diaLocal(fecha: string): string {
   return `${valor.getFullYear()}-${mes}-${dia}`;
 }
 
+// Ejecuciones registradas de cualquier tipo de tarea: una fila por corrida.
+// Sirve para las métricas del panel, donde un .bak por base no es una ejecución.
+export function consultarEjecucionesRegistradas(
+  desde: string,
+  hasta: string,
+): EjecucionesRegistradasInforme {
+  const baseDatos = obtenerBaseDatosLocal();
+  const desdeIso = new Date(`${desde}T00:00:00`).toISOString();
+  const hastaIso = new Date(`${hasta}T23:59:59.999`).toISOString();
+
+  const conteo = baseDatos
+    .prepare(`
+      SELECT COUNT(*) AS total,
+             COALESCE(SUM(CASE WHEN e.estado = 'ok' THEN 1 ELSE 0 END), 0) AS correctas,
+             COALESCE(SUM(CASE WHEN e.estado = 'error' THEN 1 ELSE 0 END), 0) AS fallidas,
+             COALESCE(SUM(CASE WHEN e.estado = 'advertencia' THEN 1 ELSE 0 END), 0) AS advertencias,
+             COUNT(DISTINCT e.respaldo_id) AS tareas
+      FROM ejecuciones_respaldo e
+      JOIN respaldos r ON r.id = e.respaldo_id
+      WHERE e.fecha >= ? AND e.fecha <= ?
+    `)
+    .get(desdeIso, hastaIso) as unknown as FilaConteoArchivos & { advertencias: number };
+
+  const dias = baseDatos
+    .prepare(`
+      SELECT COALESCE(date(e.fecha, 'localtime'), substr(e.fecha, 1, 10)) AS dia,
+             COUNT(*) AS total
+      FROM ejecuciones_respaldo e
+      JOIN respaldos r ON r.id = e.respaldo_id
+      WHERE e.fecha >= ? AND e.fecha <= ?
+      GROUP BY dia
+      ORDER BY dia
+    `)
+    .all(desdeIso, hastaIso) as unknown as { dia: string; total: number }[];
+
+  return {
+    total: conteo?.total ?? 0,
+    correctas: conteo?.correctas ?? 0,
+    fallidas: conteo?.fallidas ?? 0,
+    advertencias: conteo?.advertencias ?? 0,
+    tareas: conteo?.tareas ?? 0,
+    porDia: dias.map((fila) => ({ dia: fila.dia, total: fila.total })),
+  };
+}
+
+// Escapa los comodines de LIKE para que el texto se busque literal.
+function patronLike(texto: string): string {
+  return `%${texto.replace(/[\\%_]/g, (caracter) => `\\${caracter}`)}%`;
+}
+
 // Ejecuciones de tareas de archivos dentro del rango, del más reciente al más
 // antiguo. El conteo se hace en SQL para que no dependa del límite de la lista.
+// El texto busca tanto en la carpeta de origen como en el detalle (ruta del .zip).
 export function consultarEjecucionesArchivos(
   desde: string,
   hasta: string,
+  texto: string | null = null,
 ): EjecucionesArchivosConsultadas {
   const baseDatos = obtenerBaseDatosLocal();
   // Las fechas del informe son locales; el historial guarda ISO en UTC.
   const desdeIso = new Date(`${desde}T00:00:00`).toISOString();
   const hastaIso = new Date(`${hasta}T23:59:59.999`).toISOString();
+  const patron = texto ? patronLike(texto) : null;
+  const filtroTexto = `AND (? IS NULL OR r.origen LIKE ? ESCAPE '\\' OR e.detalle LIKE ? ESCAPE '\\')`;
 
   const conteo = baseDatos
     .prepare(`
@@ -706,8 +784,9 @@ export function consultarEjecucionesArchivos(
       FROM ejecuciones_respaldo e
       JOIN respaldos r ON r.id = e.respaldo_id
       WHERE r.tipo = 'archivos' AND e.fecha >= ? AND e.fecha <= ?
+        ${filtroTexto}
     `)
-    .get(desdeIso, hastaIso) as unknown as FilaConteoArchivos;
+    .get(desdeIso, hastaIso, patron, patron, patron) as unknown as FilaConteoArchivos;
 
   const dias = baseDatos
     .prepare(`
@@ -716,9 +795,10 @@ export function consultarEjecucionesArchivos(
       FROM ejecuciones_respaldo e
       JOIN respaldos r ON r.id = e.respaldo_id
       WHERE r.tipo = 'archivos' AND e.fecha >= ? AND e.fecha <= ?
+        ${filtroTexto}
       ORDER BY dia
     `)
-    .all(desdeIso, hastaIso) as unknown as { dia: string }[];
+    .all(desdeIso, hastaIso, patron, patron, patron) as unknown as { dia: string }[];
 
   const filas = baseDatos
     .prepare(`
@@ -727,10 +807,18 @@ export function consultarEjecucionesArchivos(
       FROM ejecuciones_respaldo e
       JOIN respaldos r ON r.id = e.respaldo_id
       WHERE r.tipo = 'archivos' AND e.fecha >= ? AND e.fecha <= ?
+        ${filtroTexto}
       ORDER BY e.fecha DESC
       LIMIT ?
     `)
-    .all(desdeIso, hastaIso, MAX_EJECUCIONES_ARCHIVOS) as unknown as FilaEjecucionArchivo[];
+    .all(
+      desdeIso,
+      hastaIso,
+      patron,
+      patron,
+      patron,
+      MAX_EJECUCIONES_ARCHIVOS,
+    ) as unknown as FilaEjecucionArchivo[];
 
   const total = conteo?.total ?? 0;
 

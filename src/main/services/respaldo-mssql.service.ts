@@ -1640,11 +1640,11 @@ export async function consultarInformeGlobalBak(
   const diasConRespaldo = [...new Set(archivos.map((archivo) => archivo.dia))].sort();
   const conRespaldo = new Set(diasConRespaldo);
 
-  // Las tareas de archivos solo tienen sentido cuando el filtro es por fecha:
-  // una base o un nombre de .bak implica una consulta exclusiva de MSSQL.
-  const incluirArchivos = !filtro.baseDatos && !filtro.texto;
+  // Las copias de archivos no dependen de una base: solo se excluyen cuando se
+  // filtra por una base concreta. El texto también se aplica a su origen.
+  const incluirArchivos = !filtro.baseDatos;
   const consultaArchivos = incluirArchivos
-    ? consultarEjecucionesArchivos(filtro.desde, filtro.hasta)
+    ? consultarEjecucionesArchivos(filtro.desde, filtro.hasta, filtro.texto)
     : null;
   let resumenArchivos: ResumenArchivosInforme | null = null;
 
