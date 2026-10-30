@@ -166,25 +166,20 @@ function mapearRespaldo(fila: FilaRespaldo): RespaldoConfigurado {
 
 const MINUTOS_POR_DIA = 1440;
 
-// Siguiente ejecución de un ciclo ya iniciado: intervalo exacto desde la
-// última ejecución, para que la antigüedad mostrada coincida con la frecuencia.
-export function calcularSiguienteEjecucion(desde: Date, frecuenciaMinutos: number): string {
-  return new Date(desde.getTime() + frecuenciaMinutos * 60 * 1000).toISOString();
-}
-
 // Corrige programaciones guardadas con cálculos anteriores que no respetaban
-// el intervalo configurado.
+// el intervalo configurado ni la hora fijada de la tarea.
 export function normalizarProximasEjecuciones(): void {
   const baseDatos = obtenerBaseDatosLocal();
   const filas = baseDatos
     .prepare(`
-      SELECT id, frecuencia_minutos, ultima_ejecucion, proxima_ejecucion
+      SELECT id, frecuencia_minutos, hora_ejecucion, ultima_ejecucion, proxima_ejecucion
       FROM respaldos
       WHERE ultima_ejecucion IS NOT NULL
     `)
     .all() as unknown as {
     id: number;
     frecuencia_minutos: number;
+    hora_ejecucion: string;
     ultima_ejecucion: string;
     proxima_ejecucion: string;
   }[];
@@ -198,7 +193,11 @@ export function normalizarProximasEjecuciones(): void {
       continue;
     }
 
-    const siguiente = calcularSiguienteEjecucion(new Date(ultima), fila.frecuencia_minutos);
+    const siguiente = calcularProximaEjecucion(
+      fila.hora_ejecucion,
+      fila.frecuencia_minutos,
+      new Date(ultima),
+    );
     const diferencia = Math.abs(actual - new Date(siguiente).getTime());
 
     if (Number.isFinite(diferencia) && diferencia > 60_000) {

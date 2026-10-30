@@ -9,7 +9,7 @@ import type {
 } from '../../shared/types/respaldo.types';
 import {
   actualizarEstadoRespaldo,
-  calcularSiguienteEjecucion,
+  calcularProximaEjecucion,
   depurarHistorialAntiguo,
   listarRespaldosVencidos,
   normalizarProximasEjecuciones,
@@ -328,7 +328,14 @@ async function ejecutarRespaldoInterno(respaldo: RespaldoConfigurado): Promise<v
   notificarCambioEjecucion(respaldo.id, true);
 
   const inicio = new Date();
-  const proximaEjecucion = calcularSiguienteEjecucion(inicio, respaldo.frecuenciaMinutos);
+  // La hora fijada de la tarea manda también en los ciclos posteriores: una
+  // copia diaria de las 23:10 se reprograma a las 23:10, no al instante en
+  // que terminó la corrida anterior.
+  const proximaEjecucion = calcularProximaEjecucion(
+    respaldo.horaEjecucion,
+    respaldo.frecuenciaMinutos,
+    inicio,
+  );
   // En MSSQL la ejecución y sus resultados se guardan antes de propagar el
   // error resumido, para no duplicar el registro en el historial.
   let ejecucionRegistrada = false;
