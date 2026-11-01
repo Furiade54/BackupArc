@@ -83,8 +83,9 @@ export function CloseConfirmModal({
           <span className="cierre__contenido">
             <span className="cierre__titulo">Cerrar por completo</span>
             <span className="cierre__descripcion">
-              Se detiene el programador y la aplicación sale del todo. No se ejecutará ninguna copia
-              hasta que la vuelvas a abrir.
+              Se detiene el programador y la aplicación espera a que terminen las copias en
+              curso antes de salir. No se ejecutará ninguna copia nueva hasta que la vuelvas a
+              abrir.
             </span>
           </span>
         </button>

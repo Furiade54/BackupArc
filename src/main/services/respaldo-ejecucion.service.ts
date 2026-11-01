@@ -11,29 +11,61 @@ import {
   actualizarEstadoRespaldo,
   calcularProximaEjecucion,
   depurarHistorialAntiguo,
+  finalizarEjecucionRespaldo,
+  listarRespaldos,
   listarRespaldosVencidos,
   normalizarProximasEjecuciones,
   obtenerRespaldo,
-  registrarEjecucionRespaldo,
+  recuperarEjecucionesInterrumpidas,
+  registrarEjecucionEnCurso,
   registrarResultadosBase,
 } from '../repositories/respaldos-local.repository';
 import { logger } from '../utils/logger';
 import { marcaTiempo, slug } from '../utils/nombres-respaldo';
+import {
+  crearPreparacion,
+  liberarPreparacion,
+  limpiarPreparacionesAbandonadas,
+  limpiarZipParciales,
+} from '../utils/publicacion';
 import { crearRunId, respaldarBasesDatosMssql } from './respaldo-mssql.service';
 
 const INTERVALO_COMPROBACION_MS = 60_000;
 const RETRASO_INICIAL_MS = 10_000;
 
 const enEjecucion = new Set<number>();
+const esperasDeCierre: Array<() => void> = [];
 let temporizador: NodeJS.Timeout | null = null;
 let comprobando = false;
+let programadorActivo = false;
 
-async function existeCarpeta(ruta: string): Promise<boolean> {
-  try {
-    const info = await fs.stat(ruta);
-    return info.isDirectory();
-  } catch {
-    return false;
+export function contarEjecucionesActivas(): number {
+  return enEjecucion.size;
+}
+
+export function hayEjecucionesActivas(): boolean {
+  return enEjecucion.size > 0;
+}
+
+// Resuelve cuando ya no queda ninguna copia en ejecución. Permite cerrar la
+// aplicación sin cortar a mitad una copia en curso.
+export function esperarEjecucionesActivas(): Promise<void> {
+  if (enEjecucion.size === 0) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolver) => {
+    esperasDeCierre.push(resolver);
+  });
+}
+
+function liberarEsperasDeCierre(): void {
+  if (enEjecucion.size > 0) {
+    return;
+  }
+
+  for (const resolver of esperasDeCierre.splice(0)) {
+    resolver();
   }
 }
 
@@ -44,6 +76,76 @@ async function existeRuta(ruta: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+interface CopiaPublicada {
+  ruta: string;
+  prefijo: string;
+  estado: 'ok' | 'advertencia';
+  detalle: string | null;
+  archivos: number | null;
+  bytes: number | null;
+}
+
+// Publica el artefacto: el rename dentro del mismo volumen es atómico, así el
+// nombre final solo aparece cuando la copia ya está completa y verificada.
+async function publicarCopia(
+  rutaPreparada: string,
+  destino: string,
+  nombreBase: string,
+  extension: string,
+  conFecha: boolean,
+  rutaOrigen: string,
+): Promise<string> {
+  let rutaFinal = path.join(destino, `${nombreBase}${extension}`);
+
+  if (rutaFinal === rutaOrigen) {
+    throw new Error('La copia coincidiría con el origen; elige otra carpeta destino.');
+  }
+
+  if (conFecha) {
+    if (await existeRuta(rutaFinal)) {
+      rutaFinal = path.join(destino, `${nombreBase}-${Date.now()}${extension}`);
+    }
+  } else {
+    // Sin fecha, la copia reemplaza a la anterior: se retira antes del rename.
+    await fs.rm(rutaFinal, { recursive: true, force: true });
+  }
+
+  await fs.rename(rutaPreparada, rutaFinal);
+
+  return rutaFinal;
+}
+
+// Compara lo copiado con la medición del origen hecha antes de empezar. Una
+// diferencia no invalida la copia —el origen pudo cambiar mientras se copiaba—,
+// pero queda registrada como advertencia en el historial.
+async function verificarCopia(
+  rutaPreparada: string,
+  metricas: { archivos: number; bytes: number } | null,
+): Promise<{ estado: 'ok' | 'advertencia'; detalle: string | null; archivos: number; bytes: number }> {
+  const obtenido = await medirOrigen(rutaPreparada);
+
+  if (!metricas) {
+    return {
+      estado: 'advertencia',
+      detalle: 'No se pudo medir el origen: la copia no se pudo verificar.',
+      ...obtenido,
+    };
+  }
+
+  if (obtenido.archivos !== metricas.archivos || obtenido.bytes !== metricas.bytes) {
+    return {
+      estado: 'advertencia',
+      detalle:
+        `Verificación con diferencias: el origen tenía ${metricas.archivos} archivos ` +
+        `(${metricas.bytes} bytes) y la copia contiene ${obtenido.archivos} ` +
+        `(${obtenido.bytes}). El origen pudo cambiar durante la copia.`,
+      ...obtenido,
+    };
+  }
+
+  return { estado: 'ok', detalle: null, ...obtenido };
 }
 
 // Cuenta archivos y bytes del origen antes de copiar, para las métricas del historial.
@@ -128,53 +230,47 @@ async function prepararRutas(
 async function copiarOrigen(
   respaldo: RespaldoConfigurado,
   fecha: Date,
-): Promise<{ ruta: string; prefijo: string }> {
+  runId: string,
+  metricas: { archivos: number; bytes: number } | null,
+): Promise<CopiaPublicada> {
   const { origen, destino, prefijo } = await prepararRutas(respaldo);
   // Carpetas: nombre20261030105000 · Archivos: nombre_20261030110200.msi
   const nombreBase = respaldo.copiaConFecha
     ? `${prefijo}${origen.esCarpeta ? '' : '_'}${marcaTiempo(fecha)}`
     : prefijo;
-
-  if (origen.esCarpeta) {
-    let rutaCopia = path.join(destino, nombreBase);
-
-    if (respaldo.copiaConFecha) {
-      if (await existeCarpeta(rutaCopia)) {
-        rutaCopia = `${rutaCopia}-${Date.now()}`;
-      }
-    } else {
-      // Sin fecha: una única carpeta que se reemplaza en cada ejecución.
-      if (rutaCopia === origen.ruta) {
-        throw new Error('La carpeta de copia coincidiría con la carpeta de origen.');
-      }
-
-      await fs.rm(rutaCopia, { recursive: true, force: true });
-    }
-
-    await fs.cp(origen.ruta, rutaCopia, { recursive: true, force: true, errorOnExist: false });
-
-    return { ruta: rutaCopia, prefijo };
-  }
-
   // Archivo suelto: se conserva su extensión y se copia como un único archivo.
-  const extension = path.extname(origen.ruta);
-  let rutaCopia = path.join(destino, `${nombreBase}${extension}`);
+  const extension = origen.esCarpeta ? '' : path.extname(origen.ruta);
+  const preparacion = await crearPreparacion(destino, runId);
+  const rutaPreparada = path.join(preparacion, `${nombreBase}${extension}`);
 
-  if (respaldo.copiaConFecha) {
-    if (await existeRuta(rutaCopia)) {
-      rutaCopia = path.join(destino, `${nombreBase}-${Date.now()}${extension}`);
-    }
-  } else {
-    if (rutaCopia === origen.ruta) {
-      throw new Error('El archivo de copia coincidiría con el archivo de origen.');
+  try {
+    if (origen.esCarpeta) {
+      await fs.cp(origen.ruta, rutaPreparada, { recursive: true, force: true, errorOnExist: false });
+    } else {
+      await fs.copyFile(origen.ruta, rutaPreparada);
     }
 
-    await fs.rm(rutaCopia, { force: true });
+    const verificacion = await verificarCopia(rutaPreparada, metricas);
+    const rutaFinal = await publicarCopia(
+      rutaPreparada,
+      destino,
+      nombreBase,
+      extension,
+      respaldo.copiaConFecha,
+      origen.ruta,
+    );
+
+    return {
+      ruta: rutaFinal,
+      prefijo,
+      estado: verificacion.estado,
+      detalle: verificacion.detalle,
+      archivos: verificacion.archivos,
+      bytes: verificacion.bytes,
+    };
+  } finally {
+    await liberarPreparacion(preparacion, runId);
   }
-
-  await fs.copyFile(origen.ruta, rutaCopia);
-
-  return { ruta: rutaCopia, prefijo };
 }
 
 function empaquetar(origen: OrigenRespaldo, rutaSalida: string): Promise<void> {
@@ -210,34 +306,46 @@ function empaquetar(origen: OrigenRespaldo, rutaSalida: string): Promise<void> {
 async function comprimirOrigen(
   respaldo: RespaldoConfigurado,
   fecha: Date,
-): Promise<{ ruta: string; prefijo: string }> {
+  runId: string,
+): Promise<CopiaPublicada> {
   const { origen, destino, prefijo } = await prepararRutas(respaldo);
   // Carpetas: nombre20261030105000.zip · Archivos: nombre_20261030110200.zip
   const nombreBase = respaldo.copiaConFecha
     ? `${prefijo}${origen.esCarpeta ? '' : '_'}${marcaTiempo(fecha)}`
     : prefijo;
-  let rutaZip = path.join(destino, `${nombreBase}.zip`);
-
-  if (respaldo.copiaConFecha) {
-    if (await existeRuta(rutaZip)) {
-      rutaZip = path.join(destino, `${nombreBase}-${Date.now()}.zip`);
-    }
-  } else {
-    await fs.rm(rutaZip, { force: true });
-  }
-
-  // Se escribe en un archivo temporal para no dejar un .zip incompleto si falla.
-  const rutaTemporal = `${rutaZip}.parcial`;
+  const preparacion = await crearPreparacion(destino, runId);
+  // El .zip se escribe dentro de la preparación: si falla, no queda visible.
+  const rutaPreparada = path.join(preparacion, `${nombreBase}.zip`);
 
   try {
-    await empaquetar(origen, rutaTemporal);
-    await fs.rename(rutaTemporal, rutaZip);
-  } catch (error) {
-    await fs.rm(rutaTemporal, { force: true });
-    throw error;
-  }
+    await empaquetar(origen, rutaPreparada);
 
-  return { ruta: rutaZip, prefijo };
+    const info = await fs.stat(rutaPreparada);
+
+    if (!info.isFile() || info.size === 0) {
+      throw new Error('El .zip generado quedó vacío; la copia no se publica.');
+    }
+
+    const rutaFinal = await publicarCopia(
+      rutaPreparada,
+      destino,
+      nombreBase,
+      '.zip',
+      respaldo.copiaConFecha,
+      origen.ruta,
+    );
+
+    return {
+      ruta: rutaFinal,
+      prefijo,
+      estado: 'ok',
+      detalle: null,
+      archivos: null,
+      bytes: info.size,
+    };
+  } finally {
+    await liberarPreparacion(preparacion, runId);
+  }
 }
 
 // Nombre que crea la app: <prefijo>[_]<14 dígitos>[-desambiguación][.extensión].
@@ -339,8 +447,13 @@ async function ejecutarRespaldoInterno(respaldo: RespaldoConfigurado): Promise<v
   // En MSSQL la ejecución y sus resultados se guardan antes de propagar el
   // error resumido, para no duplicar el registro en el historial.
   let ejecucionRegistrada = false;
+  // El registro nace antes de trabajar: si la app se cierra a mitad de la
+  // copia, la corrida queda abierta y se detecta como interrumpida al arrancar.
+  let ejecucionId: number | null = null;
 
   try {
+    ejecucionId = registrarEjecucionEnCurso(respaldo.id, inicio.toISOString());
+
     if (respaldo.tipo === 'mssql') {
       const runId = crearRunId();
       const { resultados, tipoResumen } = await respaldarBasesDatosMssql(respaldo, inicio, runId);
@@ -349,23 +462,17 @@ async function ejecutarRespaldoInterno(respaldo: RespaldoConfigurado): Promise<v
       const estado = errores.length > 0 ? 'error' : advertencias.length > 0 ? 'advertencia' : 'ok';
       const detalle = resumirResultadosMssql(resultados);
 
-      const ejecucionId = registrarEjecucionRespaldo(
-        respaldo.id,
-        estado,
-        detalle,
-        inicio.toISOString(),
-        {
-          tipo: tipoResumen,
-          runId,
-          duracionMs: Date.now() - inicio.getTime(),
-          archivos: resultados.filter((resultado) => resultado.archivo !== null).length,
-          bytes: resultados.reduce(
-            (total, resultado) =>
-              total + (resultado.archivo !== null ? (resultado.tamanoBytes ?? 0) : 0),
-            0,
-          ),
-        },
-      );
+      finalizarEjecucionRespaldo(ejecucionId, estado, detalle, {
+        tipo: tipoResumen,
+        runId,
+        duracionMs: Date.now() - inicio.getTime(),
+        archivos: resultados.filter((resultado) => resultado.archivo !== null).length,
+        bytes: resultados.reduce(
+          (total, resultado) =>
+            total + (resultado.archivo !== null ? (resultado.tamanoBytes ?? 0) : 0),
+          0,
+        ),
+      });
       registrarResultadosBase(ejecucionId, resultados);
       actualizarEstadoRespaldo(respaldo.id, estado, inicio.toISOString(), proximaEjecucion);
       ejecucionRegistrada = true;
@@ -379,11 +486,14 @@ async function ejecutarRespaldoInterno(respaldo: RespaldoConfigurado): Promise<v
       return;
     }
 
-    // Las métricas se miden antes de copiar: el origen puede cambiar durante la copia.
-    const metricas = await medirOrigen(respaldo.origen).catch(() => null);
+    // La verificación compara contra la medición del origen hecha antes de copiar.
+    const metricas = respaldo.comprimir
+      ? null
+      : await medirOrigen(respaldo.origen).catch(() => null);
+    const runId = crearRunId();
     const copia = respaldo.comprimir
-      ? await comprimirOrigen(respaldo, inicio)
-      : await copiarOrigen(respaldo, inicio);
+      ? await comprimirOrigen(respaldo, inicio, runId)
+      : await copiarOrigen(respaldo, inicio, runId, metricas);
     const rutaCopia = copia.ruta;
 
     // La retención solo aplica a los archivos que copia la propia aplicación;
@@ -398,19 +508,19 @@ async function ejecutarRespaldoInterno(respaldo: RespaldoConfigurado): Promise<v
       logger.warn(`No se pudo limpiar el destino de "${respaldo.nombre}"`, error);
     }
 
-    registrarEjecucionRespaldo(
-      respaldo.id,
-      'ok',
-      `Copia completada en ${rutaCopia}`,
-      inicio.toISOString(),
-      {
-        duracionMs: Date.now() - inicio.getTime(),
-        archivos: metricas?.archivos ?? null,
-        bytes: metricas?.bytes ?? null,
-        ubicacion: rutaCopia,
-      },
-    );
-    actualizarEstadoRespaldo(respaldo.id, 'ok', inicio.toISOString(), proximaEjecucion);
+    // Solo se registra como válida una copia ya publicada con su nombre final.
+    // Si la verificación encontró diferencias, el motivo va en el detalle para
+    // que se vea en el historial (la ruta ya se guarda como ubicación).
+    const detalleCopia = copia.detalle ?? `Copia completada en ${rutaCopia}`;
+
+    finalizarEjecucionRespaldo(ejecucionId, copia.estado, detalleCopia, {
+      runId,
+      duracionMs: Date.now() - inicio.getTime(),
+      archivos: copia.archivos,
+      bytes: copia.bytes,
+      ubicacion: rutaCopia,
+    });
+    actualizarEstadoRespaldo(respaldo.id, copia.estado, inicio.toISOString(), proximaEjecucion);
     logger.info(`Copia "${respaldo.nombre}" completada`, rutaCopia);
   } catch (error) {
     if (ejecucionRegistrada) {
@@ -420,9 +530,13 @@ async function ejecutarRespaldoInterno(respaldo: RespaldoConfigurado): Promise<v
     const mensaje = error instanceof Error ? error.message : String(error);
 
     logger.error(`Falló la copia "${respaldo.nombre}"`, error);
-    registrarEjecucionRespaldo(respaldo.id, 'error', mensaje, inicio.toISOString(), {
-      duracionMs: Date.now() - inicio.getTime(),
-    });
+
+    if (ejecucionId !== null) {
+      finalizarEjecucionRespaldo(ejecucionId, 'error', mensaje, {
+        duracionMs: Date.now() - inicio.getTime(),
+      });
+    }
+
     actualizarEstadoRespaldo(respaldo.id, 'error', inicio.toISOString(), proximaEjecucion);
 
     throw error;
@@ -430,6 +544,7 @@ async function ejecutarRespaldoInterno(respaldo: RespaldoConfigurado): Promise<v
     depurarHistorialSeguro(respaldo);
     enEjecucion.delete(respaldo.id);
     notificarCambioEjecucion(respaldo.id, false);
+    liberarEsperasDeCierre();
   }
 }
 
@@ -460,8 +575,40 @@ export async function ejecutarRespaldoAhora(id: number): Promise<void> {
   await ejecutarRespaldoInterno(respaldo);
 }
 
+// Limpia los restos que dejó un cierre inesperado: preparaciones de corridas y
+// zips parciales. Se hace al arrancar porque no hay ninguna corrida activa.
+function limpiarRestosAlIniciar(): void {
+  let respaldos: RespaldoConfigurado[];
+
+  try {
+    respaldos = listarRespaldos();
+  } catch (error) {
+    logger.warn('No se pudieron leer las tareas para limpiar restos', error);
+    return;
+  }
+
+  const destinos = new Set(
+    respaldos.map((respaldo) => respaldo.destino.trim()).filter((destino) => destino.length > 0),
+  );
+  // Carpetas donde la app comprime los .bak: ahí pueden quedar .zip.parcial.
+  const carpetasZip = new Set(
+    respaldos
+      .filter((respaldo) => respaldo.tipo === 'mssql' && respaldo.comprimirBak)
+      .map((respaldo) => respaldo.carpetaZip.trim() || respaldo.destino.trim())
+      .filter((carpeta) => carpeta.length > 0),
+  );
+
+  for (const destino of destinos) {
+    void limpiarPreparacionesAbandonadas(path.resolve(destino), null);
+  }
+
+  for (const carpeta of carpetasZip) {
+    void limpiarZipParciales(path.resolve(carpeta));
+  }
+}
+
 async function comprobarRespaldosProgramados(): Promise<void> {
-  if (comprobando) {
+  if (comprobando || !programadorActivo) {
     return;
   }
 
@@ -471,6 +618,11 @@ async function comprobarRespaldosProgramados(): Promise<void> {
     const pendientes = listarRespaldosVencidos(new Date().toISOString());
 
     for (const respaldo of pendientes) {
+      // Al cerrar la aplicación se dejan de lanzar copias nuevas.
+      if (!programadorActivo) {
+        break;
+      }
+
       if (enEjecucion.has(respaldo.id)) {
         continue;
       }
@@ -488,9 +640,10 @@ async function comprobarRespaldosProgramados(): Promise<void> {
   }
 }
 
-export function iniciarProgramador(): void {
+// Devuelve cuántas corridas interrumpidas se recuperaron al iniciar.
+export function iniciarProgramador(): number {
   if (temporizador) {
-    return;
+    return 0;
   }
 
   try {
@@ -498,6 +651,26 @@ export function iniciarProgramador(): void {
   } catch (error) {
     logger.warn('No se pudieron normalizar las próximas ejecuciones', error);
   }
+
+  // Las corridas que quedaron abiertas se marcan como fallidas y su tarea se
+  // reprograma: un cierre inesperado no deja trabajo abandonado.
+  let recuperadas = 0;
+
+  try {
+    recuperadas = recuperarEjecucionesInterrumpidas();
+
+    if (recuperadas > 0) {
+      logger.warn('Copias interrumpidas detectadas y reprogramadas', {
+        ejecuciones: recuperadas,
+      });
+    }
+  } catch (error) {
+    logger.warn('No se pudieron recuperar las copias interrumpidas', error);
+  }
+
+  limpiarRestosAlIniciar();
+
+  programadorActivo = true;
 
   setTimeout(() => {
     void comprobarRespaldosProgramados();
@@ -508,9 +681,13 @@ export function iniciarProgramador(): void {
   }, INTERVALO_COMPROBACION_MS);
 
   logger.info('Programador de copias iniciado');
+
+  return recuperadas;
 }
 
 export function detenerProgramador(): void {
+  programadorActivo = false;
+
   if (!temporizador) {
     return;
   }

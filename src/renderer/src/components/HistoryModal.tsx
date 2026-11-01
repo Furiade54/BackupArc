@@ -381,7 +381,7 @@ export function HistoryModal({ respaldo, alCerrar }: HistoryModalProps) {
                     respaldo.comprimirBak
                       ? `Comprimido en .zip${respaldo.carpetaZip ? ` (${respaldo.carpetaZip})` : ''}`
                       : null,
-                    respaldo.verificarBak ? 'Verificado al terminar' : null,
+                    'Verificación del .bak obligatoria',
                     respaldo.usarCopiaTemporal ? 'Copia temporal intermedia' : null,
                   ]
                     .filter(Boolean)
@@ -576,9 +576,13 @@ export function HistoryModal({ respaldo, alCerrar }: HistoryModalProps) {
                             <li key={resultado.id} className="resultados-base__item">
                               <div className="resultados-base__cabecera">
                                 {resultado.archivo === null ? (
-                                  <span className="resultados-base__tipo resultados-base__tipo--omitida">
-                                    Omitida
-                                  </span>
+                                  // Un fallo sin archivo no es una base omitida: el chip
+                                  // "Fallida" de la derecha ya lo indica.
+                                  resultado.estado === 'error' ? null : (
+                                    <span className="resultados-base__tipo resultados-base__tipo--omitida">
+                                      Omitida
+                                    </span>
+                                  )
                                 ) : (
                                   <span
                                     className={`resultados-base__tipo resultados-base__tipo--${resultado.tipoEjecutado}`}
@@ -591,6 +595,14 @@ export function HistoryModal({ respaldo, alCerrar }: HistoryModalProps) {
                                   <span className="resultados-base__meta">
                                     {formatearTamano(resultado.tamanoBytes)} ·{' '}
                                     {ETIQUETAS_COMPRESION[resultado.compresion]}
+                                  </span>
+                                )}
+                                {resultado.archivo !== null && !resultado.publicado && (
+                                  <span
+                                    className="etiqueta etiqueta--error"
+                                    title="El archivo quedó en el destino pero no se publicó: la verificación no pasó."
+                                  >
+                                    Sin publicar
                                   </span>
                                 )}
                                 {resultado.estado !== 'ok' && resultado.estado !== 'pendiente' && (

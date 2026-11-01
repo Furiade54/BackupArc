@@ -40,6 +40,8 @@ function App() {
   const [modalConfiguracionAbierto, setModalConfiguracionAbierto] = useState(false);
   const [modalActualizacionAbierto, setModalActualizacionAbierto] = useState(false);
   const [dialogoCierreAbierto, setDialogoCierreAbierto] = useState(false);
+  const [esperandoCierre, setEsperandoCierre] = useState(false);
+  const [copiasEnEspera, setCopiasEnEspera] = useState(0);
   const [buscandoActualizacion, setBuscandoActualizacion] = useState(false);
   const [resultadoActualizacion, setResultadoActualizacion] = useState<ResultadoActualizacion | null>(null);
   const [respaldoEditar, setRespaldoEditar] = useState<RespaldoConfigurado | null>(null);
@@ -102,7 +104,20 @@ function App() {
 
   useEffect(() => {
     return window.api.ventana.alSolicitarCierre(() => {
+      if (esperandoCierre) {
+        return;
+      }
+
       setDialogoCierreAbierto(true);
+    });
+  }, [esperandoCierre]);
+
+  // El cierre se aplaza en el proceso principal hasta que terminen las copias
+  // activas; aquí solo se informa el número que queda pendiente.
+  useEffect(() => {
+    return window.api.ventana.alEsperarCierre((activas) => {
+      setCopiasEnEspera(activas);
+      setEsperandoCierre(activas > 0);
     });
   }, []);
 
@@ -549,6 +564,16 @@ function App() {
           alCerrar={() => setRespaldoEliminar(null)}
           alEliminado={alEliminarCopia}
         />
+      )}
+
+      {esperandoCierre && (
+        <Modal titulo="Cerrando de forma segura" alCerrar={() => undefined} clase="modal--compacto">
+          <p>
+            Se está esperando a que {copiasEnEspera === 1 ? 'termine la copia en curso' : `terminen las ${copiasEnEspera} copias en curso`}.
+            La aplicación se cerrará automáticamente al finalizar, para no dejar un backup a
+            medias.
+          </p>
+        </Modal>
       )}
 
       {dialogoCierreAbierto && (

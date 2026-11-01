@@ -8,6 +8,7 @@ export const IPC_CHANNELS = {
   VENTANA_OCULTAR: 'ventana:ocultar',
   VENTANA_SALIR: 'ventana:salir',
   VENTANA_SOLICITAR_CIERRE: 'ventana:solicitar-cierre',
+  VENTANA_ESPERANDO_CIERRE: 'ventana:esperando-cierre',
   VENTANA_ESTADO: 'ventana:estado',
   VENTANA_ESTADO_CAMBIADA: 'ventana:estado-cambiada',
   DIALOGO_SELECCIONAR_CARPETA: 'dialogo:seleccionar-carpeta',

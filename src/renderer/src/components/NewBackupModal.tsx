@@ -125,7 +125,6 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
   );
   const [fullCadaDias, setFullCadaDias] = useState(String(respaldo?.fullCadaDias ?? 7));
   const [comprimirBak, setComprimirBak] = useState(respaldo?.comprimirBak ?? false);
-  const [verificarBak, setVerificarBak] = useState(respaldo?.verificarBak ?? false);
   const [usarCopiaTemporal, setUsarCopiaTemporal] = useState(
     respaldo?.usarCopiaTemporal ?? false,
   );
@@ -345,7 +344,8 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
         modoMssql: esMssql ? modoMssql : 'completo',
         fullCadaDias: esMssql ? fullCadaDiasNumero : 7,
         comprimirBak: esMssql ? comprimirBak : false,
-        verificarBak: esMssql ? verificarBak : false,
+        // La verificación del .bak es obligatoria: sin VERIFYONLY no se publica.
+        verificarBak: esMssql,
         usarCopiaTemporal: esMssql ? usarCopiaTemporal : false,
         carpetaTemporal: esMssql ? carpetaTemporal.trim() : '',
         carpetaTemporalLectura: esMssql ? carpetaTemporalLectura.trim() : '',
@@ -484,9 +484,7 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
       adicionales.push('comprime el .bak en .zip');
     }
 
-    if (verificarBak) {
-      adicionales.push('verifica el .bak al terminar');
-    }
+    adicionales.push('verifica el .bak al terminar');
 
     if (usarCopiaTemporal) {
       adicionales.push('copia desde una carpeta temporal');
@@ -1117,7 +1115,7 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
                             onClick={() => setVerificacionAbierta(!verificacionAbierta)}
                           >
                             <span className="seccion__texto">Verificación del backup</span>
-                            {verificarBak && <span className="seccion__marca">Activa</span>}
+                            <span className="seccion__marca">Obligatoria</span>
                             <span
                               className={`seccion__flecha${
                                 verificacionAbierta ? ' seccion__flecha--abierta' : ''
@@ -1129,17 +1127,11 @@ export function NewBackupModal({ respaldo = null, alCerrar, alGuardado }: NewBac
 
                         {verificacionAbierta && (
                           <div id="backup-verificacion" className="seccion__cuerpo">
-                            <label className="campo__casilla">
-                              <input
-                                type="checkbox"
-                                checked={verificarBak}
-                                disabled={guardando}
-                                onChange={(evento) => setVerificarBak(evento.target.checked)}
-                              />
-                              Verificar el .bak al terminar (RESTORE VERIFYONLY)
-                            </label>
                             <span className="campo__ayuda">
-                              La verificación lee el archivo completo y puede alargar la ejecución.
+                              Todo .bak se verifica con RESTORE VERIFYONLY WITH CHECKSUM antes de
+                              publicarse: si no pasa, la copia queda como fallida y no se publica
+                              en el destino. La verificación lee el archivo completo y puede
+                              alargar la ejecución.
                             </span>
                           </div>
                         )}

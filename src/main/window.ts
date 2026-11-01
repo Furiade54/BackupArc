@@ -4,6 +4,7 @@ import { ARGUMENTO_INICIO_OCULTO, CLAVES_CONFIGURACION } from '../shared/constan
 import { IPC_CHANNELS } from '../shared/constants/ipc-channels';
 import type { EstadoVentana } from '../shared/types/api.types';
 import { obtenerPreferenciaConDefecto } from './services/local-database.service';
+import { hayEjecucionesActivas } from './services/respaldo-ejecucion.service';
 import { logger } from './utils/logger';
 
 function notificarEstadoVentana(ventana: BrowserWindow): void {
@@ -19,6 +20,24 @@ let saliendo = false;
 
 export function marcarSalida(): void {
   saliendo = true;
+}
+
+// Avisa a la interfaz cuántas copias faltan para poder cerrar. La ventana se
+// muestra si estaba oculta, para que el usuario vea que el cierre está en curso.
+export function notificarEsperaCierre(activas: number): void {
+  for (const ventana of BrowserWindow.getAllWindows()) {
+    if (ventana.isDestroyed()) {
+      continue;
+    }
+
+    if (activas > 0 && !ventana.isVisible()) {
+      ventana.show();
+    }
+
+    if (!ventana.webContents.isDestroyed()) {
+      ventana.webContents.send(IPC_CHANNELS.VENTANA_ESPERANDO_CIERRE, { activas });
+    }
+  }
 }
 
 export function crearVentanaPrincipal(): BrowserWindow {
@@ -113,6 +132,13 @@ export function crearVentanaPrincipal(): BrowserWindow {
       obtenerPreferenciaConDefecto(CLAVES_CONFIGURACION.mantenerEnSegundoPlano, '1') !== '0';
 
     if (!mantenerEnSegundoPlano) {
+      // Con copias en curso no se cierra la ventana en silencio: se dispara el
+      // cierre normal para que la espera se vea y la app salga al terminar.
+      if (hayEjecucionesActivas()) {
+        evento.preventDefault();
+        app.quit();
+      }
+
       return;
     }
 

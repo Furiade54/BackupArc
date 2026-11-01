@@ -161,6 +161,7 @@ export function inicializarBaseDatosLocal(): void {
       archivos INTEGER,
       bytes INTEGER,
       ubicacion TEXT,
+      en_curso INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (respaldo_id) REFERENCES respaldos(id) ON DELETE CASCADE
     );
 
@@ -294,6 +295,14 @@ export function inicializarBaseDatosLocal(): void {
       conexion.exec('ALTER TABLE ejecuciones_respaldo ADD COLUMN ubicacion TEXT');
     }
 
+    // Marca las corridas que están en marcha: las que queden abiertas al
+    // arrancar son ejecuciones interrumpidas por un cierre inesperado.
+    if (!columnasEjecuciones.some((columna) => columna.name === 'en_curso')) {
+      conexion.exec(
+        'ALTER TABLE ejecuciones_respaldo ADD COLUMN en_curso INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+
     conexion.exec(`
       CREATE TABLE IF NOT EXISTS resultados_respaldo (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -311,6 +320,7 @@ export function inicializarBaseDatosLocal(): void {
         tamano_zip_bytes INTEGER,
         estado TEXT NOT NULL,
         detalle TEXT,
+        publicado INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (ejecucion_id) REFERENCES ejecuciones_respaldo(id) ON DELETE CASCADE
       );
 
@@ -332,6 +342,14 @@ export function inicializarBaseDatosLocal(): void {
 
     if (!columnasResultados.some((columna) => columna.name === 'tamano_zip_bytes')) {
       conexion.exec('ALTER TABLE resultados_respaldo ADD COLUMN tamano_zip_bytes INTEGER');
+    }
+
+    // Los registros anteriores a la publicación se dan por publicados: en su
+    // momento el archivo se escribió con su nombre final.
+    if (!columnasResultados.some((columna) => columna.name === 'publicado')) {
+      conexion.exec(
+        'ALTER TABLE resultados_respaldo ADD COLUMN publicado INTEGER NOT NULL DEFAULT 1',
+      );
     }
 
     conexion.exec('COMMIT');

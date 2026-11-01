@@ -91,6 +91,8 @@ export interface ApiElectron {
     estado: () => Promise<EstadoVentana>;
     alCambiarEstado: (callback: (estado: EstadoVentana) => void) => () => void;
     alSolicitarCierre: (callback: () => void) => () => void;
+    /** Copias que faltan para poder cerrar; 0 indica que ya no se espera. */
+    alEsperarCierre: (callback: (activas: number) => void) => () => void;
   };
   db: {
     estado: () => Promise<ResultadoIpc<EstadoConexion>>;

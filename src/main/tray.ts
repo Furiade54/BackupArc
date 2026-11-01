@@ -206,6 +206,17 @@ export function avisarYaEnEjecucion(): void {
   );
 }
 
+// Cierra el círculo de la detección: el usuario sabe que hubo copias cortadas
+// y que ya quedaron reprogramadas, sin tener que abrir el historial.
+export function avisarCopiasRecuperadas(cantidad: number): void {
+  const mensaje =
+    cantidad === 1
+      ? 'Una copia quedó interrumpida por un cierre inesperado. Se marcó como fallida y se reprogramó para ejecutarse de nuevo.'
+      : `${cantidad} copias quedaron interrumpidas por un cierre inesperado. Se marcaron como fallidas y se reprogramaron para ejecutarse de nuevo.`;
+
+  mostrarAviso('Copias interrumpidas recuperadas', mensaje, mostrarVentanaPrincipal);
+}
+
 export function avisarActualizacionDisponible(version: string, alHacerClic: () => void): void {
   mostrarAviso(
     `Nueva versión disponible: ${version}`,

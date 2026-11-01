@@ -81,6 +81,7 @@ interface FilaResultadoBase {
   compresion: string | null;
   archivo_zip: string | null;
   tamano_zip_bytes: number | null;
+  publicado: number;
   estado: string;
   detalle: string | null;
 }
@@ -420,11 +421,23 @@ export function listarRespaldosVencidos(ahora: string): RespaldoConfigurado[] {
   return filas.map(mapearRespaldo);
 }
 
-export function registrarEjecucionRespaldo(
-  respaldoId: number,
+// La corrida se registra antes de empezar: si la aplicación se cierra a mitad
+// de camino, el registro queda abierto y se puede detectar en el arranque.
+export function registrarEjecucionEnCurso(respaldoId: number, fecha: string): number {
+  const resultado = obtenerBaseDatosLocal()
+    .prepare(`
+      INSERT INTO ejecuciones_respaldo (respaldo_id, fecha, estado, en_curso)
+      VALUES (?, ?, 'pendiente', 1)
+    `)
+    .run(respaldoId, fecha);
+
+  return Number(resultado.lastInsertRowid);
+}
+
+export function finalizarEjecucionRespaldo(
+  ejecucionId: number,
   estado: EstadoRespaldo,
   detalle: string | null,
-  fecha: string,
   opciones: {
     tipo?: string | null;
     runId?: string | null;
@@ -433,18 +446,22 @@ export function registrarEjecucionRespaldo(
     bytes?: number | null;
     ubicacion?: string | null;
   } = {},
-): number {
-  const resultado = obtenerBaseDatosLocal()
+): void {
+  obtenerBaseDatosLocal()
     .prepare(`
-      INSERT INTO ejecuciones_respaldo (
-        respaldo_id, fecha, estado, detalle, tipo, run_id,
-        duracion_ms, archivos, bytes, ubicacion
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      UPDATE ejecuciones_respaldo
+      SET estado = ?,
+          detalle = ?,
+          en_curso = 0,
+          tipo = ?,
+          run_id = ?,
+          duracion_ms = ?,
+          archivos = ?,
+          bytes = ?,
+          ubicacion = ?
+      WHERE id = ?
     `)
     .run(
-      respaldoId,
-      fecha,
       estado,
       detalle,
       opciones.tipo ?? null,
@@ -453,9 +470,71 @@ export function registrarEjecucionRespaldo(
       opciones.archivos ?? null,
       opciones.bytes ?? null,
       opciones.ubicacion ?? null,
+      ejecucionId,
     );
+}
 
-  return Number(resultado.lastInsertRowid);
+interface FilaEjecucionEnCurso {
+  id: number;
+  respaldo_id: number;
+  fecha: string;
+  tipo: string;
+  destino: string;
+}
+
+// Una ejecución que sigue abierta al arrancar no terminó: la app se cerró de
+// forma inesperada. Se marca como fallida y la tarea se reprograma para
+// reintentarse, en lugar de dejar el trabajo abandonado.
+export function recuperarEjecucionesInterrumpidas(): number {
+  const baseDatos = obtenerBaseDatosLocal();
+  const pendientes = baseDatos
+    .prepare(`
+      SELECT e.id, e.respaldo_id, e.fecha, r.tipo, r.destino
+      FROM ejecuciones_respaldo e
+      JOIN respaldos r ON r.id = e.respaldo_id
+      WHERE e.en_curso = 1
+      ORDER BY e.fecha ASC
+    `)
+    .all() as unknown as FilaEjecucionEnCurso[];
+
+  if (pendientes.length === 0) {
+    return 0;
+  }
+
+  const ahora = new Date().toISOString();
+  const detalleBase =
+    'Ejecución interrumpida: la aplicación se cerró antes de que la copia terminara.';
+  const finalizar = baseDatos.prepare(`
+    UPDATE ejecuciones_respaldo
+    SET estado = 'error',
+        detalle = ?,
+        en_curso = 0,
+        duracion_ms = ?
+    WHERE id = ?
+  `);
+  const reprogramar = baseDatos.prepare(`
+    UPDATE respaldos
+    SET ultimo_estado = 'error',
+        fallo_desde = COALESCE(fallo_desde, ?),
+        proxima_ejecucion = CASE WHEN habilitado = 1 THEN ? ELSE proxima_ejecucion END
+    WHERE id = ?
+  `);
+
+  for (const fila of pendientes) {
+    const inicio = Date.parse(fila.fecha);
+    const duracion = Number.isFinite(inicio) ? Math.max(0, Date.now() - inicio) : null;
+    // Un corte deja restos distintos según el tipo: las copias de archivos se
+    // limpian al reintentar, pero un .bak que escribía SQL puede quedar ahí.
+    const detalle =
+      fila.tipo === 'mssql'
+        ? `${detalleBase} Puede haber quedado un .bak sin publicar en ${fila.destino}.`
+        : detalleBase;
+
+    finalizar.run(detalle, duracion, fila.id);
+    reprogramar.run(fila.fecha, ahora, fila.respaldo_id);
+  }
+
+  return pendientes.length;
 }
 
 // Trazabilidad por base: tipo real ejecutado, archivo generado y full usado como base.
@@ -478,8 +557,9 @@ export function registrarResultadosBase(
       archivo_zip,
       tamano_zip_bytes,
       estado,
-      detalle
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      detalle,
+      publicado
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const resultado of resultados) {
@@ -498,6 +578,7 @@ export function registrarResultadosBase(
       resultado.tamanoZipBytes,
       resultado.estado,
       resultado.detalle,
+      resultado.publicado ? 1 : 0,
     );
   }
 }
@@ -617,7 +698,7 @@ export function listarHistorialRespaldo(id: number): EjecucionRespaldo[] {
       SELECT r.id, r.ejecucion_id, r.base_datos, r.tipo_ejecutado, r.archivo,
              r.base_archivo, r.base_guid, r.base_lsn, r.base_fecha,
              r.tamano_bytes, r.compresion, r.archivo_zip, r.tamano_zip_bytes,
-             r.estado, r.detalle
+             r.publicado, r.estado, r.detalle
       FROM resultados_respaldo r
       JOIN ejecuciones_respaldo e ON e.id = r.ejecucion_id
       WHERE e.respaldo_id = ?
@@ -643,6 +724,7 @@ export function listarHistorialRespaldo(id: number): EjecucionRespaldo[] {
       compresion: esCompresion(fila.compresion),
       archivoZip: fila.archivo_zip,
       tamanoZipBytes: fila.tamano_zip_bytes,
+      publicado: fila.publicado === 1,
       estado: esEstadoRespaldo(fila.estado) ? fila.estado : 'pendiente',
       detalle: fila.detalle,
     });

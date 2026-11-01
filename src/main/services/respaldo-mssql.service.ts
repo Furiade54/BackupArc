@@ -28,6 +28,7 @@ import {
 } from '../repositories/respaldos-local.repository';
 import { logger } from '../utils/logger';
 import { marcaTiempo } from '../utils/nombres-respaldo';
+import { crearPreparacion, liberarPreparacion } from '../utils/publicacion';
 import {
   configuracionSqlPara,
   estaConfiguracionCompleta,
@@ -919,13 +920,14 @@ function resultadoOmitidoBase(baseDatos: string, detalle: string): NuevoResultad
     tamanoZipBytes: null,
     estado: 'advertencia',
     detalle,
+    publicado: false,
   };
 }
 
 function resultadoErrorBase(
   baseDatos: string,
   tipo: TipoEjecutadoMssql,
-  archivo: string,
+  archivo: string | null,
   full: FullRegistrado | null,
   detalle: string,
 ): NuevoResultadoBaseRespaldo {
@@ -943,6 +945,7 @@ function resultadoErrorBase(
     tamanoZipBytes: null,
     estado: 'error',
     detalle,
+    publicado: false,
   };
 }
 
@@ -1030,27 +1033,68 @@ async function respaldarBase(
   }
 
   const nombreArchivo = nombreBak(respaldo, fecha, tipo, baseDatos, runId);
-  // El .bak debe quedar al final en "destino"; con copia intermedia, SQL lo
-  // escribe primero en la carpeta temporal y la app lo mueve después.
+  // Publicación híbrida: cuando el .bak lo escribe SQL Server se deja en su
+  // nombre final (msdb guarda esa ruta y debe seguir siendo válida) y se marca
+  // como publicado tras verificar. Con copia intermedia el archivo lo mueve la
+  // app, así que se prepara en un directorio temporal y se publica con rename.
   const archivo = path.win32.join(destino, nombreArchivo);
+  const publicaConPreparacion = respaldo.usarCopiaTemporal;
+  const etiqueta = `BackupArc: ${respaldo.nombre}`;
+  const notaFull = tipo === 'completo' && motivoFull ? ` Full automático: ${motivoFull}.` : '';
+
+  let preparacion: string | null = null;
+
+  // Con preparación real no queda ningún archivo final si algo falla; en un
+  // servidor remoto el .bak puede haber quedado escrito aunque no se publique.
+  const resultadoFallo = async (detalle: string): Promise<NuevoResultadoBaseRespaldo> => {
+    const habiaPreparacion = preparacion !== null;
+
+    if (preparacion) {
+      await liberarPreparacion(preparacion, runId);
+      preparacion = null;
+    }
+
+    return resultadoErrorBase(baseDatos, tipo, habiaPreparacion ? null : archivo, full, detalle);
+  };
+
+  if (publicaConPreparacion) {
+    try {
+      preparacion = await crearPreparacion(destino, runId);
+    } catch (error) {
+      return resultadoErrorBase(
+        baseDatos,
+        tipo,
+        null,
+        full,
+        `No se pudo crear la carpeta de preparación en ${destino}: ${mensajeErrorSql(error)}.`,
+      );
+    }
+  }
+
   const rutaBackup = respaldo.usarCopiaTemporal
     ? path.win32.join(carpetaTemporal, nombreArchivo)
     : archivo;
-  const etiqueta = `BackupArc: ${respaldo.nombre}`;
-  const notaFull = tipo === 'completo' && motivoFull ? ` Full automático: ${motivoFull}.` : '';
+  // Con copia intermedia, la app lee el .bak desde la ruta de lectura.
+  const rutaLectura = respaldo.usarCopiaTemporal
+    ? path.win32.join(respaldo.carpetaTemporalLectura.trim() || carpetaTemporal, nombreArchivo)
+    : rutaBackup;
+
+  // El .bak intermedio se descarta en cuanto deja de servir.
+  const descartarTemporal = async (): Promise<void> => {
+    if (respaldo.usarCopiaTemporal) {
+      await fs.rm(rutaLectura, { force: true }).catch(() => undefined);
+    }
+  };
 
   try {
     await ejecutarBackup(pool, baseDatos, rutaBackup, etiqueta, tipo);
   } catch (error) {
     const detalle = await describirFalloBackup(pool, baseDatos, rutaBackup, error);
 
-    return resultadoErrorBase(
-      baseDatos,
-      tipo,
-      archivo,
-      full,
-      `${detalle}${notaFull}${avisoDestino ?? ''}`,
-    );
+    // Un .bak a medias en la carpeta temporal no debe quedar ahí.
+    await descartarTemporal();
+
+    return resultadoFallo(`${detalle}${notaFull}${avisoDestino ?? ''}`);
   }
 
   logger.info(`Copia ${tipo} de la base "${baseDatos}" completada`, rutaBackup);
@@ -1087,50 +1131,76 @@ async function respaldarBase(
     detalles.push(`Full automático: ${motivoFull}.`);
   }
 
-  if (respaldo.verificarBak) {
-    try {
-      await pool
-        .request()
-        .input('ruta', sql.NVarChar(4000), rutaBackup)
-        .query('RESTORE VERIFYONLY FROM DISK = @ruta WITH CHECKSUM');
-    } catch (error) {
-      estado = 'error';
-      detalles.push(
-        `RESTORE VERIFYONLY falló: ${error instanceof Error ? error.message : String(error)}`,
+  // Verificación obligatoria: sin RESTORE VERIFYONLY no hay publicación.
+  try {
+    await pool
+      .request()
+      .input('ruta', sql.NVarChar(4000), rutaBackup)
+      .query('RESTORE VERIFYONLY FROM DISK = @ruta WITH CHECKSUM');
+  } catch (error) {
+    await descartarTemporal();
+
+    return resultadoFallo(
+      `RESTORE VERIFYONLY falló: ${mensajeErrorSql(error)}. El .bak no se publica.` +
+        `${notaFull}${avisoDestino ?? ''}`,
+    );
+  }
+
+  // Destino de la publicación: la preparación cuando existe, o el nombre
+  // final en servidores remotos que escriben directamente en el destino.
+  const rutaPublicacion = preparacion
+    ? path.win32.join(preparacion, nombreArchivo)
+    : archivo;
+
+  // Tamaño real contra la cabecera: descarta archivos truncados.
+  if (preparacion) {
+    const info = await fs.stat(rutaLectura).catch(() => null);
+
+    if (!info) {
+      await descartarTemporal();
+
+      return resultadoFallo(`No se pudo leer el .bak generado en ${rutaLectura}.`);
+    }
+
+    if (cabecera?.BackupSize && info.size !== cabecera.BackupSize) {
+      await descartarTemporal();
+
+      return resultadoFallo(
+        `El .bak mide ${info.size} bytes pero su cabecera declara ${cabecera.BackupSize}: ` +
+          'la copia está incompleta y no se publica.',
       );
     }
   }
 
-  // Mueve el .bak de la carpeta temporal al destino final. Esta copia la hace
-  // la app (no SQL), así que usa las credenciales del equipo que la ejecuta.
+  // La copia intermedia la hace la app: se lleva a la preparación antes de
+  // publicar, así el destino final solo recibe archivos ya verificados.
   if (respaldo.usarCopiaTemporal) {
-    const rutaLectura = path.win32.join(
-      respaldo.carpetaTemporalLectura.trim() || carpetaTemporal,
-      nombreArchivo,
-    );
-
-    if (estado === 'error') {
+    try {
+      await fs.copyFile(rutaLectura, rutaPublicacion);
+      await fs.rm(rutaLectura, { force: true });
+      detalles.push('Copia intermedia movida desde la carpeta temporal.');
+    } catch (error) {
       await fs.rm(rutaLectura, { force: true }).catch(() => undefined);
-    } else {
-      try {
-        await fs.mkdir(path.dirname(archivo), { recursive: true }).catch(() => undefined);
-        await fs.copyFile(rutaLectura, archivo);
-        await fs.rm(rutaLectura, { force: true });
-        detalles.push('Copia intermedia movida a la carpeta destino.');
-      } catch (error) {
-        estado = 'error';
-        detalles.push(
-          `No se pudo copiar el .bak de la carpeta temporal al destino: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
+
+      return resultadoFallo(
+        `No se pudo mover el .bak de la carpeta temporal a la preparación: ${mensajeErrorSql(error)}.`,
+      );
+    }
+  }
+
+  // Publicación: rename al nombre final dentro del mismo destino.
+  if (preparacion) {
+    try {
+      await fs.rm(archivo, { force: true }).catch(() => undefined);
+      await fs.rename(rutaPublicacion, archivo);
+    } catch (error) {
+      return resultadoFallo(`No se pudo publicar el .bak en ${archivo}: ${mensajeErrorSql(error)}.`);
     }
   }
 
   // La compresión la hace la app: genera un .zip estable por base y reemplaza
   // el anterior en cada ejecución. El .bak se conserva para SQL Server.
-  if (respaldo.comprimirBak && estado !== 'error') {
+  if (respaldo.comprimirBak) {
     const nombreZip = `${nombreArchivoSeguro(baseDatos)}.zip`;
     // Carpeta propia del .zip si se indicó; si no, junto al .bak.
     const carpetaZip = respaldo.carpetaZip.trim() || destino;
@@ -1157,6 +1227,12 @@ async function respaldarBase(
     }
   }
 
+  // La preparación ya cumplió su función: el .bak quedó publicado.
+  if (preparacion) {
+    await liberarPreparacion(preparacion, runId);
+    preparacion = null;
+  }
+
   return {
     baseDatos,
     tipoEjecutado: tipo,
@@ -1171,6 +1247,7 @@ async function respaldarBase(
     tamanoZipBytes,
     estado,
     detalle: detalles.length > 0 ? detalles.join(' ') : null,
+    publicado: true,
   };
 }
 

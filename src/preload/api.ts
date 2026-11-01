@@ -36,6 +36,17 @@ export const api: ApiElectron = {
         ipcRenderer.removeListener(IPC_CHANNELS.VENTANA_SOLICITAR_CIERRE, escuchar);
       };
     },
+    alEsperarCierre: (callback) => {
+      const escuchar = (_evento: IpcRendererEvent, datos: { activas: number }) => {
+        callback(datos.activas);
+      };
+
+      ipcRenderer.on(IPC_CHANNELS.VENTANA_ESPERANDO_CIERRE, escuchar);
+
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.VENTANA_ESPERANDO_CIERRE, escuchar);
+      };
+    },
   },
   db: {
     estado: () => ipcRenderer.invoke(IPC_CHANNELS.DB_ESTADO),

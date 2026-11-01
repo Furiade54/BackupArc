@@ -110,6 +110,8 @@ export interface ResultadoBaseRespaldo {
   archivoZip: string | null;
   /** Tamaño en bytes del .zip generado. */
   tamanoZipBytes: number | null;
+  /** true solo cuando el .bak quedó verificado y publicado en el destino. */
+  publicado: boolean;
   estado: EstadoRespaldo;
   detalle: string | null;
 }
