@@ -122,4 +122,11 @@ export const api: ApiElectron = {
   archivos: {
     listar: (limite) => ipcRenderer.invoke(IPC_CHANNELS.ARCHIVOS_LISTAR, limite),
   },
+  diagnostico: {
+    registrarError: (datos) => ipcRenderer.invoke(IPC_CHANNELS.DIAGNOSTICO_REGISTRAR_ERROR, datos),
+    resumen: () => ipcRenderer.invoke(IPC_CHANNELS.DIAGNOSTICO_RESUMEN),
+    reportar: () => ipcRenderer.invoke(IPC_CHANNELS.DIAGNOSTICO_REPORTAR),
+    exportar: () => ipcRenderer.invoke(IPC_CHANNELS.DIAGNOSTICO_EXPORTAR),
+    abrirCarpetaLogs: () => ipcRenderer.invoke(IPC_CHANNELS.DIAGNOSTICO_ABRIR_LOGS),
+  },
 };

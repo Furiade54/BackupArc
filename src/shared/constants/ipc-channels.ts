@@ -36,4 +36,9 @@ export const IPC_CHANNELS = {
   RESPALDOS_INFORME_BAK: 'respaldos:informe-bak',
   RESPALDOS_INFORME_GLOBAL: 'respaldos:informe-global',
   RESPALDOS_RESUMEN_EJECUCIONES: 'respaldos:resumen-ejecuciones',
+  DIAGNOSTICO_REGISTRAR_ERROR: 'diagnostico:registrar-error',
+  DIAGNOSTICO_RESUMEN: 'diagnostico:resumen',
+  DIAGNOSTICO_REPORTAR: 'diagnostico:reportar',
+  DIAGNOSTICO_EXPORTAR: 'diagnostico:exportar',
+  DIAGNOSTICO_ABRIR_LOGS: 'diagnostico:abrir-logs',
 } as const;

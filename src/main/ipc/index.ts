@@ -5,13 +5,19 @@ import { comprobarConexion } from '../services/database.service';
 import { registrarIpcActualizaciones } from './actualizaciones.ipc';
 import { registrarIpcArchivos } from './archivos.ipc';
 import { registrarIpcConfiguracion } from './configuracion.ipc';
+import { registrarIpcDiagnostico } from './diagnostico.ipc';
 import { registrarIpcDialogos } from './dialogos.ipc';
+import { instrumentarIpc } from './instrumentar-ipc';
 import { registrarIpcMssql } from './mssql.ipc';
 import { registrarIpcPreferencias } from './preferencias.ipc';
 import { registrarIpcRespaldos } from './respaldos.ipc';
 import { registrarIpcVentana } from './ventana.ipc';
 
 export function registrarManejadoresIpc(): void {
+  // Debe ejecutarse antes que cualquier ipcMain.handle para que todos los
+  // canales queden registrados con contexto en el log.
+  instrumentarIpc();
+
   ipcMain.handle(IPC_CHANNELS.APP_INFO, (): ResultadoIpc<InfoAplicacion> => ({
     ok: true,
     datos: {
@@ -41,4 +47,5 @@ export function registrarManejadoresIpc(): void {
   registrarIpcConfiguracion();
   registrarIpcActualizaciones();
   registrarIpcRespaldos();
+  registrarIpcDiagnostico();
 }

@@ -11,6 +11,7 @@ import { HistoryModal } from './components/HistoryModal';
 import { Modal } from './components/Modal';
 import { NewBackupModal } from './components/NewBackupModal';
 import { PanelControl, type FiltroCopias } from './components/PanelControl';
+import { ReportFailureModal } from './components/ReportFailureModal';
 import { ReportsSection } from './components/ReportsSection';
 import { Sidebar } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
@@ -39,6 +40,7 @@ function App() {
   const [modalNuevoAbierto, setModalNuevoAbierto] = useState(false);
   const [modalConfiguracionAbierto, setModalConfiguracionAbierto] = useState(false);
   const [modalActualizacionAbierto, setModalActualizacionAbierto] = useState(false);
+  const [modalReporteAbierto, setModalReporteAbierto] = useState(false);
   const [dialogoCierreAbierto, setDialogoCierreAbierto] = useState(false);
   const [esperandoCierre, setEsperandoCierre] = useState(false);
   const [copiasEnEspera, setCopiasEnEspera] = useState(0);
@@ -416,6 +418,7 @@ function App() {
           version={info?.version ?? '2.0.0'}
           alNavegar={navegarASeccion}
           alAbrirConfiguracion={() => setModalConfiguracionAbierto(true)}
+          alReportarFallo={() => setModalReporteAbierto(true)}
         />
 
         <div
@@ -540,6 +543,10 @@ function App() {
         <Modal titulo="Configuración avanzada" alCerrar={() => setModalConfiguracionAbierto(false)}>
           <AdvancedSettings empaquetada={info?.empaquetada ?? false} />
         </Modal>
+      )}
+
+      {modalReporteAbierto && (
+        <ReportFailureModal alCerrar={() => setModalReporteAbierto(false)} />
       )}
 
       {modalNuevoAbierto && (

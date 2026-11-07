@@ -77,6 +77,47 @@ export interface EstadoVentana {
   maximizada: boolean;
 }
 
+export interface ErrorCapturadoRenderer {
+  origen: string;
+  mensaje: string;
+  pila?: string | null;
+  componente?: string | null;
+  contexto?: string | null;
+}
+
+export interface EntradaDiagnostico {
+  momento: string;
+  nivel: string;
+  mensaje: string;
+}
+
+export interface ArchivoLog {
+  nombre: string;
+  bytes: number;
+}
+
+export interface ResumenDiagnostico {
+  version: string;
+  electron: string;
+  chrome: string;
+  node: string;
+  plataforma: string;
+  arquitectura: string;
+  empaquetada: boolean;
+  carpetaLogs: string | null;
+  archivosLog: ArchivoLog[];
+  erroresRecientes: EntradaDiagnostico[];
+  advertenciasRecientes: EntradaDiagnostico[];
+  totalLineas: number;
+}
+
+export interface ReportePreparado {
+  titulo: string;
+  cuerpo: string;
+  url: string;
+  resumen: ResumenDiagnostico;
+}
+
 export interface ApiElectron {
   app: {
     plataforma: string;
@@ -153,5 +194,12 @@ export interface ApiElectron {
   };
   archivos: {
     listar: (limite?: number) => Promise<ResultadoIpc<ArchivoRespaldo[]>>;
+  };
+  diagnostico: {
+    registrarError: (datos: ErrorCapturadoRenderer) => Promise<ResultadoIpc<void>>;
+    resumen: () => Promise<ResultadoIpc<ResumenDiagnostico>>;
+    reportar: () => Promise<ResultadoIpc<ReportePreparado>>;
+    exportar: () => Promise<ResultadoIpc<string>>;
+    abrirCarpetaLogs: () => Promise<ResultadoIpc<void>>;
   };
 }

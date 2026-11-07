@@ -19,6 +19,7 @@ import {
 } from './services/actualizaciones.service';
 import { avisarCopiasRecuperadas, avisarEjecucionSegundoPlano, avisarPrimerInicioDelDia, avisarYaEnEjecucion, crearBandeja, destruirBandeja, mostrarVentanaPrincipal } from './tray';
 import { logger } from './utils/logger';
+import { registrarCapturaGlobalDeErrores } from './utils/errores-globales';
 import { crearVentanaPrincipal, marcarSalida, notificarEsperaCierre } from './window';
 
 const rutaEnv = app.isPackaged
@@ -26,6 +27,9 @@ const rutaEnv = app.isPackaged
   : path.join(app.getAppPath(), '.env');
 
 cargarVariablesEntorno({ path: rutaEnv, quiet: true });
+
+// Lo antes posible: cualquier fallo posterior debe quedar registrado en disco.
+registrarCapturaGlobalDeErrores();
 
 // Debe coincidir con el AppUserModelID que el instalador MSI asigna al acceso
 // directo (electron-wix-msi usa com.squirrel.<nombre>.<exe>), de lo contrario
@@ -47,6 +51,7 @@ function liberarRecursos(): void {
   }
 
   recursosLiberados = true;
+  logger.info('Liberando recursos antes de cerrar');
   detenerProgramador();
   detenerComprobadorActualizaciones();
   destruirBandeja();
@@ -125,7 +130,13 @@ if (!bloqueoInstancia) {
     }
 
     ventanaPrincipal.on('hide', avisarEjecucionSegundoPlano);
-    logger.info('BackupArc 2.0 iniciado');
+    logger.info('BackupArc iniciado', {
+      version: app.getVersion(),
+      electron: process.versions.electron,
+      plataforma: process.platform,
+      arquitectura: process.arch,
+      empaquetada: app.isPackaged,
+    });
 
     app.on('activate', () => {
       const [ventana] = BrowserWindow.getAllWindows();
@@ -144,6 +155,7 @@ if (!bloqueoInstancia) {
 
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
+      logger.info('Todas las ventanas se cerraron; se solicita el cierre de la aplicación');
       app.quit();
     }
   });
@@ -162,6 +174,10 @@ if (!bloqueoInstancia) {
       return;
     }
 
+    logger.info('Cierre de la aplicación', {
+      copiasActivas: contarEjecucionesActivas(),
+      cierreDiferido: cierreAutorizado,
+    });
     marcarSalida();
     liberarRecursos();
   });
