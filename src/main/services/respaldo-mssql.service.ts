@@ -170,6 +170,25 @@ function lsnCoincide(a: string | number | null, b: string | number | null): bool
   return primero === segundo;
 }
 
+// backup_size y BackupSize llegan desde SQL Server como numeric(20,0), que
+// puede superar Number.MAX_SAFE_INTEGER. Se limita al máximo representable
+// para no perder precisión ni romper la lectura desde la base local.
+const MAX_BYTES_SEGURO = Number.MAX_SAFE_INTEGER;
+
+function bytesSeguros(valor: unknown): number | null {
+  if (valor === null || valor === undefined || valor === '') {
+    return null;
+  }
+
+  const numero = typeof valor === 'number' ? valor : Number(valor);
+
+  if (!Number.isFinite(numero) || numero <= 0) {
+    return null;
+  }
+
+  return Math.min(numero, MAX_BYTES_SEGURO);
+}
+
 interface FilaErrorLog {
   LogDate: string | Date;
   ProcessInfo: string | null;
@@ -352,7 +371,9 @@ async function leerCabecera(
       .input('ruta', sql.NVarChar(4000), archivo)
       .query<FilaCabeceraBackup>('RESTORE HEADERONLY FROM DISK = @ruta');
 
-    return resultado.recordset[0] ?? null;
+    const fila = resultado.recordset[0] ?? null;
+
+    return fila ? { ...fila, BackupSize: bytesSeguros(fila.BackupSize) } : null;
   } catch (error) {
     logger.warn(`No se pudo leer la cabecera del backup ${archivo}`, error);
     return null;
@@ -576,7 +597,7 @@ async function tamanoUltimoBackup(
         ORDER BY bs.backup_finish_date DESC, bs.backup_set_id DESC
       `);
 
-    return resultado.recordset[0]?.tamano ?? null;
+    return bytesSeguros(resultado.recordset[0]?.tamano);
   } catch (error) {
     logger.warn(`No se pudo leer el tamaño del backup de "${baseDatos}"`, error);
     return null;

@@ -686,7 +686,7 @@ export function listarHistorialRespaldo(id: number): EjecucionRespaldo[] {
   const filas = baseDatos
     .prepare(`
       SELECT id, fecha, estado, detalle, tipo, run_id,
-             duracion_ms, archivos, bytes, ubicacion
+             duracion_ms, archivos, CAST(bytes AS REAL) AS bytes, ubicacion
       FROM ejecuciones_respaldo
       WHERE respaldo_id = ?
       ORDER BY fecha DESC
@@ -697,7 +697,8 @@ export function listarHistorialRespaldo(id: number): EjecucionRespaldo[] {
     .prepare(`
       SELECT r.id, r.ejecucion_id, r.base_datos, r.tipo_ejecutado, r.archivo,
              r.base_archivo, r.base_guid, r.base_lsn, r.base_fecha,
-             r.tamano_bytes, r.compresion, r.archivo_zip, r.tamano_zip_bytes,
+             CAST(r.tamano_bytes AS REAL) AS tamano_bytes, r.compresion,
+             r.archivo_zip, CAST(r.tamano_zip_bytes AS REAL) AS tamano_zip_bytes,
              r.publicado, r.estado, r.detalle
       FROM resultados_respaldo r
       JOIN ejecuciones_respaldo e ON e.id = r.ejecucion_id
