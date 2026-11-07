@@ -1,0 +1,122 @@
+.modal--reporte {
+  width: min(760px, 92vw);
+}
+
+.reporte__texto {
+  margin: 0 0 12px;
+  color: var(--texto);
+  line-height: 1.5;
+}
+
+.reporte__texto--suave {
+  color: var(--texto-suave);
+  font-size: var(--texto-md);
+}
+
+.reporte__estado {
+  margin: 12px 0;
+  color: var(--texto-suave);
+  font-size: var(--texto-md);
+  word-break: break-all;
+}
+
+.reporte__datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 12px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--fondo-panel-suave);
+}
+
+.reporte__datos dt {
+  margin: 0 0 2px;
+  color: var(--texto-suave);
+  font-size: var(--texto-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.reporte__datos dd {
+  margin: 0;
+  color: var(--texto);
+  font-size: var(--texto-md);
+}
+
+.reporte__subtitulo {
+  margin: 0 0 8px;
+  color: var(--texto);
+  font-size: var(--texto-base);
+}
+
+.reporte__errores {
+  max-height: 180px;
+  margin: 0 0 12px;
+  padding: 10px 10px 10px 24px;
+  overflow-y: auto;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--fondo-panel);
+  color: var(--texto-suave);
+  font-size: var(--texto-sm);
+  line-height: 1.5;
+}
+
+.reporte__errores code {
+  color: var(--acento);
+}
+
+.reporte__consentimiento {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 4px 0 12px;
+  color: var(--texto);
+  font-size: var(--texto-md);
+  cursor: pointer;
+}
+
+.reporte__consentimiento input {
+  margin-top: 2px;
+}
+
+.reporte__confirmacion {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--borde-fuerte);
+  border-radius: 8px;
+  background: var(--fondo-panel-suave);
+  color: var(--texto);
+  font-size: var(--texto-md);
+}
+
+.reporte__confirmacion a {
+  color: var(--acento);
+}
+
+.error-fatal {
+  max-width: 640px;
+  margin: 80px auto;
+  padding: 24px;
+  border: 1px solid var(--borde-fuerte);
+  border-radius: 12px;
+  background: var(--fondo-panel);
+  color: var(--texto);
+}
+
+.error-fatal h1 {
+  margin: 0 0 12px;
+  font-size: var(--texto-xl);
+}
+
+.error-fatal__detalle {
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--fondo-panel-suave);
+  color: var(--error-texto);
+  font-family: monospace;
+  font-size: var(--texto-sm);
+  overflow-x: auto;
+}

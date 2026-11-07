@@ -138,6 +138,12 @@ export async function buscarActualizaciones(): Promise<ResultadoActualizacion> {
       };
     }
 
+    logger.info('Actualización disponible', {
+      versionActual,
+      versionDisponible,
+      urlPublicacion,
+    });
+
     return {
       estado: 'disponible',
       versionActual,
@@ -335,6 +341,7 @@ export async function instalarActualizacion(): Promise<void> {
   // Solo se programa el reinicio si el usuario aceptó los permisos: así, al
   // cancelar el aviso de Windows, la app sigue abierta mostrando el error.
   programarReinicioTrasInstalacion();
+  logger.info('Actualización instalada; se reinicia la aplicación', { version });
 
   marcarSalida();
   app.quit();

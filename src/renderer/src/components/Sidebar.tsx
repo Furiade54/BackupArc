@@ -7,6 +7,7 @@ interface SidebarProps {
   version: string;
   alNavegar: (seccion: string) => void;
   alAbrirConfiguracion: () => void;
+  alReportarFallo: () => void;
 }
 
 interface ItemNavegacion {
@@ -78,6 +79,21 @@ function IconoInformes() {
   );
 }
 
+function IconoReporte() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M8 2.5 14.5 13.5h-13z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
+      <path d="M8 6.2v3.1M8 11.4v.1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 // Los grupos siguen las responsabilidades: operar, analizar y administrar.
 const GRUPOS: GrupoNavegacion[] = [
   {
@@ -98,6 +114,7 @@ export function Sidebar({
   version,
   alNavegar,
   alAbrirConfiguracion,
+  alReportarFallo,
 }: SidebarProps) {
   return (
     <aside
@@ -137,6 +154,14 @@ export function Sidebar({
         </nav>
 
         <div className="navegacion__pie">
+          <button
+            type="button"
+            className="navegacion__enlace"
+            onClick={alReportarFallo}
+          >
+            <IconoReporte />
+            Reportar fallo
+          </button>
           <button
             type="button"
             className="navegacion__enlace"

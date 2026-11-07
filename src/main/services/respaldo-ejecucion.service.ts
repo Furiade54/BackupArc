@@ -434,6 +434,12 @@ async function ejecutarRespaldoInterno(respaldo: RespaldoConfigurado): Promise<v
 
   enEjecucion.add(respaldo.id);
   notificarCambioEjecucion(respaldo.id, true);
+  logger.info(`Copia "${respaldo.nombre}" iniciada`, {
+    id: respaldo.id,
+    tipo: respaldo.tipo,
+    origen: respaldo.origen,
+    destino: respaldo.destino,
+  });
 
   const inicio = new Date();
   // La hora fijada de la tarea manda también en los ciclos posteriores: una
